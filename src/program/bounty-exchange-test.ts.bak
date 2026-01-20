@@ -1,0 +1,284 @@
+import * as anchor from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import { BountyExchangeProgram } from "../target/types/bounty_exchange_program";
+import {
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+} from "@solana/web3.js";
+import {
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  createMint,
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
+  getAssociatedTokenAddressSync,
+} from "@solana/spl-token";
+import { expect } from "chai";
+import BN from "bn.js";
+
+describe("bounty-exchange-program", () => {
+  // Configure the client to use the local cluster.
+  const provider = anchor.AnchorProvider.env();
+  anchor.setProvider(provider);
+
+  const program = anchor.workspace
+    .bountyExchangeProgram as Program<BountyExchangeProgram>;
+
+  // Admin wallet (payer) from the anchor provider
+  const admin = provider.wallet as anchor.Wallet;
+
+  // Test constants
+  const FEE_WALLET = new PublicKey(
+    "9JxBhWbrwkqX2heLq1mA3YXWKsbkCH8rE5gaVxzH7Foo"
+  );
+  const TARGET_TOKEN = new PublicKey(
+    "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+  ); // JUP token
+
+  // ANSEM
+  const TARGET_TRADER = new PublicKey(
+    "AVAZvHLR2PcWpDf8BXY4rVxNHYRBytycHkcB5z5QNXYm"
+  );
+
+  // USDC has 6 decimals
+  const USDC_DECIMALS = 6;
+  const REWARD_AMOUNT = 1000 * 10 ** USDC_DECIMALS; // 1000 USDC
+  const TARGET_VOLUME = 10000 * 10 ** USDC_DECIMALS; // 10000$ volume target
+  const EXPIRATION_WINDOW_HOURS = 72; // 72 hours
+  const HOLD_DURATION_HOURS = 16; // 16 hours
+
+  // Devnet USDC mint (we'll create this for testing)
+  let usdcMint: PublicKey;
+  let usdcMintAuthority: Keypair;
+  let adminTokenAccount: PublicKey;
+  let feeWalletTokenAccount: PublicKey;
+
+  before(async () => {
+    console.log("Setting up devnet USDC mint and token accounts...");
+
+    // Create mint authority keypair
+    usdcMintAuthority = Keypair.generate();
+
+    // Transfer SOL from admin wallet to usdcMintAuthority for transaction fees
+    const transferTx = new anchor.web3.Transaction().add(
+      anchor.web3.SystemProgram.transfer({
+        fromPubkey: admin.publicKey,
+        toPubkey: usdcMintAuthority.publicKey,
+        lamports: 2 * anchor.web3.LAMPORTS_PER_SOL,
+      })
+    );
+    await provider.sendAndConfirm(transferTx, [], { skipPreflight: true });
+
+    // Create the USDC mint (simulating devnet USDC)
+    usdcMint = await createMint(
+      provider.connection,
+      usdcMintAuthority,
+      usdcMintAuthority.publicKey,
+      null,
+      USDC_DECIMALS,
+      Keypair.generate(),
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+    console.log("Created USDC Mint:", usdcMint.toBase58());
+
+    // Create admin's token account
+    const adminAta = await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      usdcMintAuthority,
+      usdcMint,
+      admin.publicKey
+    );
+    adminTokenAccount = adminAta.address;
+    console.log("Admin Token Account:", adminTokenAccount.toBase58());
+
+    // Create fee wallet's token account (ATA owned by FEE_WALLET)
+    const feeWalletAta = await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      usdcMintAuthority,
+      usdcMint,
+      FEE_WALLET
+    );
+    feeWalletTokenAccount = feeWalletAta.address;
+    console.log("Fee Wallet Token Account:", feeWalletTokenAccount.toBase58());
+
+    // Mint a good supply of USDC to admin (100,000 USDC)
+    const mintAmount = 100_000 * 10 ** USDC_DECIMALS;
+    await mintTo(
+      provider.connection,
+      usdcMintAuthority,
+      usdcMint,
+      adminTokenAccount,
+      usdcMintAuthority,
+      mintAmount
+    );
+    console.log(`Minted ${mintAmount / 10 ** USDC_DECIMALS} USDC to admin`);
+
+    // Verify admin balance
+    const adminBalance = await provider.connection.getTokenAccountBalance(
+      adminTokenAccount
+    );
+    console.log("Admin USDC Balance:", adminBalance.value.uiAmount);
+  });
+
+  it("should create a deal successfully", async () => {
+    // Small delay to ensure blockhash is fresh
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const dealId = new BN(5);
+
+    // Derive the deal PDA
+    const [dealPda, dealBump] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("deal"),
+        admin.publicKey.toBuffer(),
+        dealId.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId
+    );
+    console.log("Deal PDA:", dealPda.toBase58());
+
+    // Derive the escrow vault ATA (owned by deal PDA)
+    const escrowVault = getAssociatedTokenAddressSync(
+      usdcMint,
+      dealPda,
+      true, // allowOwnerOffCurve = true for PDA
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    console.log("Escrow Vault:", escrowVault.toBase58());
+
+    // Get admin balance before transaction
+    const adminBalanceBefore = await provider.connection.getTokenAccountBalance(
+      adminTokenAccount
+    );
+    console.log(
+      "Admin USDC Balance Before:",
+      adminBalanceBefore.value.uiAmount
+    );
+
+    // Create deal args
+    const createDealArgs = {
+      dealId: dealId,
+      token: TARGET_TOKEN,
+      trader: TARGET_TRADER,
+      rewardAmount: new BN(REWARD_AMOUNT),
+      targetVolume: new BN(TARGET_VOLUME),
+      expirationWindowInHours: new BN(EXPIRATION_WINDOW_HOURS),
+      holdDurationInHours: new BN(HOLD_DURATION_HOURS),
+    };
+
+    // Execute create_deal instruction
+    const tx = await program.methods
+      .createDeal(createDealArgs)
+      .accountsStrict({
+        payer: admin.publicKey,
+        deal: dealPda,
+        escrowVault: escrowVault,
+        payerTokenAccount: adminTokenAccount,
+        feeWallet: feeWalletTokenAccount,
+        usdcMint: usdcMint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc({ commitment: "confirmed", skipPreflight: true });
+
+    console.log("Create Deal Transaction Signature:", tx);
+
+    // Fetch and verify the deal account
+    const dealAccount = await program.account.deal.fetch(dealPda);
+
+    expect(dealAccount.dealId.toNumber()).to.equal(dealId.toNumber());
+    expect(dealAccount.creator.toBase58()).to.equal(admin.publicKey.toBase58());
+    expect(dealAccount.token.toBase58()).to.equal(TARGET_TOKEN.toBase58());
+    expect(dealAccount.trader.toBase58()).to.equal(TARGET_TRADER.toBase58());
+    expect(dealAccount.rewardAmount.toNumber()).to.equal(REWARD_AMOUNT);
+    expect(dealAccount.targetVolume.toNumber()).to.equal(TARGET_VOLUME);
+    expect(dealAccount.expirationWindowInHours.toNumber()).to.equal(
+      EXPIRATION_WINDOW_HOURS
+    );
+    expect(dealAccount.holdDurationInHours.toNumber()).to.equal(
+      HOLD_DURATION_HOURS
+    );
+    expect(dealAccount.escrowVault.toBase58()).to.equal(escrowVault.toBase58());
+    expect(dealAccount.bump).to.equal(dealBump);
+    expect(dealAccount.isActive).to.be.true;
+    expect(dealAccount.createdAt.toNumber()).to.be.greaterThan(0);
+
+    console.log("Deal Account Data:");
+    console.log("  Deal ID:", dealAccount.dealId.toNumber());
+    console.log("  Creator:", dealAccount.creator.toBase58());
+    console.log("  Token:", dealAccount.token.toBase58());
+    console.log("  Trader:", dealAccount.trader.toBase58());
+    console.log(
+      "  Reward Amount:",
+      dealAccount.rewardAmount.toNumber() / 10 ** USDC_DECIMALS,
+      "USDC"
+    );
+    console.log(
+      "  Target Volume:",
+      dealAccount.targetVolume.toNumber() / 10 ** USDC_DECIMALS,
+      "USD"
+    );
+    console.log(
+      "  Expiration Window:",
+      dealAccount.expirationWindowInHours.toNumber(),
+      "hours"
+    );
+    console.log(
+      "  Hold Duration:",
+      dealAccount.holdDurationInHours.toNumber(),
+      "hours"
+    );
+    console.log("  Is Active:", dealAccount.isActive);
+    console.log(
+      "  Created At:",
+      new Date(dealAccount.createdAt.toNumber() * 1000).toISOString()
+    );
+
+    // Verify escrow vault received the reward amount
+    const escrowBalance = await provider.connection.getTokenAccountBalance(
+      escrowVault
+    );
+    expect(Number(escrowBalance.value.amount)).to.equal(REWARD_AMOUNT);
+    console.log("Escrow Vault Balance:", escrowBalance.value.uiAmount, "USDC");
+
+    const expectedFee = REWARD_AMOUNT * 0.1; // 10% fee = 100 USDC
+
+    // Verify fee wallet received the 10% fee (100 USDC)
+    const feeWalletBalance = await provider.connection.getTokenAccountBalance(
+      feeWalletTokenAccount
+    );
+    expect(Number(feeWalletBalance.value.amount)).to.equal(expectedFee);
+    console.log(
+      "Fee Wallet Balance:",
+      feeWalletBalance.value.uiAmount,
+      "USDC (10% fee)"
+    );
+
+    // Verify admin balance decreased by reward + fee
+    const adminBalanceAfter = await provider.connection.getTokenAccountBalance(
+      adminTokenAccount
+    );
+    const expectedDeduction = REWARD_AMOUNT + expectedFee; // 1000 + 100 = 1100 USDC
+    const actualDeduction =
+      Number(adminBalanceBefore.value.amount) -
+      Number(adminBalanceAfter.value.amount);
+    expect(actualDeduction).to.equal(expectedDeduction);
+    console.log(
+      "Admin USDC Balance After:",
+      adminBalanceAfter.value.uiAmount,
+      "USDC"
+    );
+    console.log(
+      "Total Deducted from Admin:",
+      actualDeduction / 10 ** USDC_DECIMALS,
+      "USDC (reward + fee)"
+    );
+
+    console.log("\n✅ Deal created successfully!");
+  });
+});

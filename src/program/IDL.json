@@ -1,20 +1,14 @@
-/**
- * Program IDL in camelCase format in order to be used in JS/TS.
- *
- * Note that this is only a type helper and is not the actual IDL. The original
- * IDL can be found at `target/idl/bounty_exchange_program.json`.
- */
-export type BountyExchangeProgram = {
+{
     "address": "9c3ZGDTinPuGXxJGaN3QsNRBcDgkkjcsNgXgcoqoGW8D",
     "metadata": {
-      "name": "bountyExchangeProgram",
+      "name": "bounty_exchange_program",
       "version": "0.1.0",
       "spec": "0.1.0",
       "description": "Created with Anchor"
     },
     "instructions": [
       {
-        "name": "createDeal",
+        "name": "create_deal",
         "discriminator": [
           198,
           212,
@@ -57,7 +51,7 @@ export type BountyExchangeProgram = {
             }
           },
           {
-            "name": "escrowVault",
+            "name": "escrow_vault",
             "writable": true,
             "pda": {
               "seeds": [
@@ -67,11 +61,11 @@ export type BountyExchangeProgram = {
                 },
                 {
                   "kind": "account",
-                  "path": "tokenProgram"
+                  "path": "token_program"
                 },
                 {
                   "kind": "account",
-                  "path": "usdcMint"
+                  "path": "usdc_mint"
                 }
               ],
               "program": {
@@ -114,25 +108,25 @@ export type BountyExchangeProgram = {
             }
           },
           {
-            "name": "payerTokenAccount",
+            "name": "payer_token_account",
             "writable": true
           },
           {
-            "name": "feeWallet",
+            "name": "fee_wallet",
             "writable": true
           },
           {
-            "name": "usdcMint"
+            "name": "usdc_mint"
           },
           {
-            "name": "tokenProgram"
+            "name": "token_program"
           },
           {
-            "name": "associatedTokenProgram",
+            "name": "associated_token_program",
             "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
           },
           {
-            "name": "systemProgram",
+            "name": "system_program",
             "address": "11111111111111111111111111111111"
           }
         ],
@@ -141,7 +135,7 @@ export type BountyExchangeProgram = {
             "name": "args",
             "type": {
               "defined": {
-                "name": "createDealArgs"
+                "name": "CreateDealArgs"
               }
             }
           }
@@ -150,7 +144,7 @@ export type BountyExchangeProgram = {
     ],
     "accounts": [
       {
-        "name": "deal",
+        "name": "Deal",
         "discriminator": [
           125,
           223,
@@ -166,18 +160,18 @@ export type BountyExchangeProgram = {
     "errors": [
       {
         "code": 6000,
-        "name": "invalidFeeWallet",
+        "name": "InvalidFeeWallet",
         "msg": "Invalid fee wallet"
       }
     ],
     "types": [
       {
-        "name": "createDealArgs",
+        "name": "CreateDealArgs",
         "type": {
           "kind": "struct",
           "fields": [
             {
-              "name": "dealId",
+              "name": "deal_id",
               "type": "u64"
             },
             {
@@ -189,31 +183,31 @@ export type BountyExchangeProgram = {
               "type": "pubkey"
             },
             {
-              "name": "rewardAmount",
+              "name": "reward_amount",
               "type": "u64"
             },
             {
-              "name": "targetVolume",
+              "name": "target_volume",
               "type": "u64"
             },
             {
-              "name": "expirationWindowInHours",
+              "name": "expiration_window_in_hours",
               "type": "u64"
             },
             {
-              "name": "holdDurationInHours",
+              "name": "hold_duration_in_hours",
               "type": "u64"
             }
           ]
         }
       },
       {
-        "name": "deal",
+        "name": "Deal",
         "type": {
           "kind": "struct",
           "fields": [
             {
-              "name": "dealId",
+              "name": "deal_id",
               "type": "u64"
             },
             {
@@ -229,23 +223,23 @@ export type BountyExchangeProgram = {
               "type": "pubkey"
             },
             {
-              "name": "rewardAmount",
+              "name": "reward_amount",
               "type": "u64"
             },
             {
-              "name": "targetVolume",
+              "name": "target_volume",
               "type": "u64"
             },
             {
-              "name": "expirationWindowInHours",
+              "name": "expiration_window_in_hours",
               "type": "u64"
             },
             {
-              "name": "holdDurationInHours",
+              "name": "hold_duration_in_hours",
               "type": "u64"
             },
             {
-              "name": "escrowVault",
+              "name": "escrow_vault",
               "type": "pubkey"
             },
             {
@@ -253,16 +247,15 @@ export type BountyExchangeProgram = {
               "type": "u8"
             },
             {
-              "name": "createdAt",
+              "name": "created_at",
               "type": "i64"
             },
             {
-              "name": "isActive",
+              "name": "is_active",
               "type": "bool"
             }
           ]
         }
       }
     ]
-  };
-  
+  }
