@@ -120,7 +120,7 @@ function formatExpiryDate(createdAt: number, expirationWindowInHours: number): s
 function DealPageSkeleton() {
   return (
     <div className="min-h-screen bg-black pt-16">
-      <div className="max-w-3xl mx-auto px-6 py-12">
+      <div className="max-w-5xl mx-auto px-6 py-12">
         {/* Header Skeleton */}
         <div className="flex items-center justify-between mb-10">
           <div className="h-5 w-32 bg-[#2a2a2a] rounded animate-pulse" />
@@ -273,9 +273,9 @@ export default function DealPage() {
       );
     } catch (err) {
       console.error("Failed to accept bounty:", err);
-      setError(err instanceof Error ? err.message : "Failed to accept bounty");
       setButtonState("idle");
-      toast.error("Failed to accept bounty");
+      const errorMessage = err instanceof Error ? err.message : "Failed to accept bounty";
+      toast.error(errorMessage);
     }
   };
 
@@ -338,7 +338,7 @@ export default function DealPage() {
 
   return (
     <div className="min-h-screen bg-black pt-16">
-      <div className="max-w-3xl mx-auto px-6 py-12">
+      <div className="max-w-5xl mx-auto px-6 py-12">
         {/* Header */}
         <div className="flex items-center justify-between mb-10">
           <Link
