@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useDealsForTrader, DealWithMetadata } from "@/hooks/useDealsForTrader";
 import { Button } from "@/components/ui/button";
@@ -27,10 +28,10 @@ function formatVolume(amount: bigint | number): string {
 
 interface DealCardProps {
   deal: DealWithMetadata;
-  onAccept: (deal: DealWithMetadata) => void;
+  onClick: (deal: DealWithMetadata) => void;
 }
 
-function DealCard({ deal, onAccept }: DealCardProps) {
+function DealCard({ deal, onClick }: DealCardProps) {
   const [imageError, setImageError] = useState(false);
   const tokenName = deal.tokenMetadata?.name || "Unknown Token";
   const tokenSymbol = deal.tokenMetadata?.symbol || "???";
@@ -40,14 +41,16 @@ function DealCard({ deal, onAccept }: DealCardProps) {
 
   const holdPercentage = 100; // Default to 100% as shown in the design
   const holdDuration = Number(deal.holdDurationInHours);
-  const holdText = holdDuration >= 60
-    ? `${Math.floor(holdDuration / 60)} hour${Math.floor(holdDuration / 60) !== 1 ? 's' : ''}`
-    : `${holdDuration} minutes`;
+  const holdText = `${holdDuration} hour${holdDuration !== 1 ? 's' : ''}`;
 
   const showFallback = !tokenImage || imageError;
 
   return (
-    <div className="flex-shrink-0 w-[340px] bg-[#1a1a1a] rounded-2xl p-5 border border-[#2a2a2a] hover:border-[#3a3a3a] transition-colors">
+    <div
+      onClick={() => onClick(deal)}
+      className="flex-shrink-0 w-[340px] bg-black rounded-2xl p-5 border border-white/20 hover:border-white/30 transition-colors cursor-pointer"
+      style={{ background: 'radial-gradient(ellipse 150% 150% at top center, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 40%, black 80%)' }}
+    >
       {/* Header: Token info and Reward */}
       <div className="flex items-start justify-between mb-5">
         <div className="flex items-center gap-3">
@@ -70,11 +73,11 @@ function DealCard({ deal, onAccept }: DealCardProps) {
           </div>
           <div>
             <h3 className="text-white font-semibold text-lg">{tokenName}</h3>
-            <p className="text-gray-500 text-sm uppercase">{tokenSymbol}</p>
+            <p className="text-gray-500 text-sm tracking-tight">{tokenSymbol}</p>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Reward</p>
+          <p className="text-gray-500 text-xs tracking-tight mb-1">Reward</p>
           <p className="text-[#c8ff00] font-bold text-2xl">{formatUSDC(deal.rewardAmount.toNumber())}</p>
         </div>
       </div>
@@ -82,26 +85,25 @@ function DealCard({ deal, onAccept }: DealCardProps) {
       {/* Stats: Target Volume and Expires */}
       <div className="flex gap-8 mb-5">
         <div>
-          <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Target Volume</p>
+          <p className="text-gray-500 text-xs tracking-tight mb-1">Target Volume</p>
           <p className="text-white font-semibold text-xl">{formatVolume(deal.targetVolume.toNumber())}</p>
         </div>
         <div>
-          <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Expires in</p>
+          <p className="text-gray-500 text-xs tracking-tight mb-1">Expires in</p>
           <p className="text-white font-semibold text-xl">{deal.expirationWindowInHours.toNumber()}h</p>
         </div>
       </div>
 
-      {/* Footer: Hold info and Accept button */}
+      {/* Footer: Hold info */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-gray-400 text-sm">
           <Clock className="w-4 h-4" />
           <span>Hold {holdPercentage}% for {holdText}</span>
         </div>
         <Button
-          onClick={() => onAccept(deal)}
           className="bg-white text-black hover:bg-gray-200 font-semibold px-6 py-2 rounded-lg text-sm cursor-pointer"
         >
-          Accept
+          View
         </Button>
       </div>
     </div>
@@ -143,13 +145,13 @@ function LoadingCard() {
 }
 
 export function DealCarousel() {
+  const router = useRouter();
   const { publicKey } = useWallet();
   const { deals, loading, error } = useDealsForTrader();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const handleAccept = async (deal: DealWithMetadata) => {
-    // TODO: Implement accept deal functionality
-    console.log("Accepting deal:", deal.publicKey.toBase58());
+  const handleCardClick = (deal: DealWithMetadata) => {
+    router.push(`/deal/${deal.publicKey.toBase58()}`);
   };
 
   const scroll = (direction: "left" | "right") => {
@@ -174,7 +176,7 @@ export function DealCarousel() {
         <div className="flex items-center justify-center w-8 h-8 rounded-full border border-[#3a3a3a]">
           <Target className="w-4 h-4 text-white" />
         </div>
-        <h2 className="text-white font-semibold text-lg tracking-wide uppercase">
+        <h2 className="text-white font-semibold text-lg tracking-tight">
           Available Bounties
         </h2>
         <div className="flex-1 h-px bg-gradient-to-r from-[#3a3a3a] to-transparent ml-4" />
@@ -222,7 +224,7 @@ export function DealCarousel() {
             </div>
           ) : (
             deals.map((deal) => (
-              <DealCard key={deal.publicKey.toBase58()} deal={deal} onAccept={handleAccept} />
+              <DealCard key={deal.publicKey.toBase58()} deal={deal} onClick={handleCardClick} />
             ))
           )}
         </div>

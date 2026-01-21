@@ -8,8 +8,6 @@ import {
   USDC_MINT,
 } from "@/program/instructions/createDeal";
 
-const HELIUS_RPC_URL = "https://devnet.helius-rpc.com/?api-key=017f56ed-c6c1-480a-8c11-dbc09ab2358d";
-
 function generateDealId(): BN {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 0xFFFF);
@@ -99,7 +97,7 @@ export async function POST(request: NextRequest) {
       holdDurationInHours,
     };
 
-    const connection = new Connection(HELIUS_RPC_URL, "confirmed");
+    const connection = new Connection(process.env.HELIUS_RPC_URL!, "confirmed");
 
     const { instruction, dealPDA, escrowVault } = await buildCreateDealInstruction(
       connection,
