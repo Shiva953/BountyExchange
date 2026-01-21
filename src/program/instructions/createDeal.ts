@@ -8,17 +8,14 @@ import {
 import IDL from "../IDL.json";
 import { BountyExchangeProgram } from "../idl";
 
-// Program ID from IDL
 export const PROGRAM_ID = new PublicKey(
   "9c3ZGDTinPuGXxJGaN3QsNRBcDgkkjcsNgXgcoqoGW8D"
 );
 
-// Devnet USDC mint
 export const USDC_MINT = new PublicKey(
   "GqiwdrC5ybCCmtvG2Yir9CVfsENjYQTHwKB9B2y3mi5f"
 );
 
-// Fee wallet - protocol fee collection wallet
 export const FEE_WALLET = new PublicKey(
   "9JxBhWbrwkqX2heLq1mA3YXWKsbkCH8rE5gaVxzH7Foo"
 );
@@ -33,23 +30,16 @@ export interface CreateDealArgs {
   holdDurationInHours: BN;
 }
 
-/**
- * Creates an Anchor program instance
- */
 export function getProgram(connection: Connection): Program<BountyExchangeProgram> {
-  // Create a read-only provider (no wallet needed for building instructions)
   const provider = new AnchorProvider(
     connection,
-    {} as any, // Dummy wallet - we only need this for building, not signing
+    {} as any,
     { commitment: "confirmed" }
   );
 
   return new Program(IDL as BountyExchangeProgram, provider);
 }
 
-/**
- * Derives the deal PDA address
- */
 export function getDealPDA(payer: PublicKey, dealId: BN, programId: PublicKey = PROGRAM_ID): [PublicKey, number] {
   const dealIdBuffer = dealId.toArrayLike(Buffer, "le", 8);
   return PublicKey.findProgramAddressSync(
@@ -58,16 +48,10 @@ export function getDealPDA(payer: PublicKey, dealId: BN, programId: PublicKey = 
   );
 }
 
-/**
- * Derives the escrow vault ATA address using the deal PDA
- */
 export function getEscrowVaultATA(deal: PublicKey, mint: PublicKey): PublicKey {
   return getAssociatedTokenAddressSync(mint, deal, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 }
 
-/**
- * Builds the createDeal instruction using Anchor's program.methods
- */
 export async function buildCreateDealInstruction(
   connection: Connection,
   payer: PublicKey,
@@ -77,17 +61,11 @@ export async function buildCreateDealInstruction(
 ) {
   const program = getProgram(connection);
 
-  // Derive PDAs
   const [dealPDA] = getDealPDA(payer, args.dealId, program.programId);
   const escrowVault = getEscrowVaultATA(dealPDA, usdcMint);
-
-  // Get payer's USDC token account
   const payerTokenAccount = getAssociatedTokenAddressSync(usdcMint, payer);
-
-  // Get fee wallet's USDC token account (ATA)
   const feeWalletTokenAccount = getAssociatedTokenAddressSync(usdcMint, feeWallet);
 
-  // Build the instruction using Anchor's methods API
   const instruction = await program.methods
     .createDeal({
       dealId: args.dealId,
@@ -120,9 +98,6 @@ export async function buildCreateDealInstruction(
   };
 }
 
-/**
- * Logs deal creation details for debugging
- */
 export function logDealDetails(
   payer: PublicKey,
   args: CreateDealArgs,

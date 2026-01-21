@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Transaction } from "@solana/web3.js";
-import { ArrowLeft, CheckCircle2, Loader2, Target, Wallet, Wallet2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -196,7 +196,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
         </DialogHeader>
 
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={onClose} className="gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose} className="gap-2 cursor-pointer">
             <ArrowLeft className="size-4" />
             Abort configuration
           </Button>
@@ -214,14 +214,9 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
         <div className="grid gap-6 lg:grid-cols-[2.1fr_1fr]">
           <div className="space-y-4">
             <Card className="border-dashed">
-              <CardHeader className="flex-row items-start gap-3">
-                <div className="flex-shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
-                  <Wallet className="size-5" />
-                </div>
-                <div className="space-y-1">
-                  <CardTitle className="text-base">Token & Trader</CardTitle>
-                  <CardDescription>Define token contract and target trader.</CardDescription>
-                </div>
+              <CardHeader>
+                <CardTitle className="text-base">Token & Trader</CardTitle>
+                <CardDescription>Define token contract and target trader.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
@@ -246,14 +241,9 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
             </Card>
 
             <Card className="border-dashed">
-              <CardHeader className="flex-row items-start gap-3">
-                <div className="flex-shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
-                  <Wallet2 className="size-5" />
-                </div>
-                <div className="space-y-1">
-                  <CardTitle className="text-base">Reward & Conditions</CardTitle>
-                  <CardDescription>Set the reward, target volume, and timing.</CardDescription>
-                </div>
+              <CardHeader>
+                <CardTitle className="text-base">Reward & Conditions</CardTitle>
+                <CardDescription>Set the reward, target volume, and timing.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -350,7 +340,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
 
                 <Button
                   size="lg"
-                  className="w-full"
+                  className="w-full cursor-pointer"
                   disabled={isButtonDisabled}
                   onClick={handleCreateBounty}
                 >
@@ -371,7 +361,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                   <Button
                     variant="link"
                     asChild
-                    className="px-0 text-sm font-semibold text-primary"
+                    className="px-0 text-sm font-semibold text-primary cursor-pointer"
                   >
                     <a
                       href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}

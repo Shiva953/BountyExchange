@@ -14,6 +14,31 @@ export type BountyExchangeProgram = {
     },
     "instructions": [
       {
+        "name": "acceptDeal",
+        "discriminator": [
+          76,
+          156,
+          34,
+          30,
+          129,
+          136,
+          76,
+          244
+        ],
+        "accounts": [
+          {
+            "name": "trader",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "deal",
+            "writable": true
+          }
+        ],
+        "args": []
+      },
+      {
         "name": "createDeal",
         "discriminator": [
           198,
@@ -173,6 +198,21 @@ export type BountyExchangeProgram = {
         "code": 6001,
         "name": "rewardBelowMinimum",
         "msg": "Minimum reward amount is 200 USDC"
+      },
+      {
+        "code": 6002,
+        "name": "unauthorizedTrader",
+        "msg": "Only the targeted trader can accept this deal"
+      },
+      {
+        "code": 6003,
+        "name": "dealNotActive",
+        "msg": "Deal is not active"
+      },
+      {
+        "code": 6004,
+        "name": "dealAlreadyAccepted",
+        "msg": "Deal has already been accepted"
       }
     ],
     "types": [
