@@ -168,6 +168,11 @@ export type BountyExchangeProgram = {
         "code": 6000,
         "name": "invalidFeeWallet",
         "msg": "Invalid fee wallet"
+      },
+      {
+        "code": 6001,
+        "name": "rewardBelowMinimum",
+        "msg": "Minimum reward amount is 200 USDC"
       }
     ],
     "types": [
@@ -258,6 +263,10 @@ export type BountyExchangeProgram = {
             },
             {
               "name": "isActive",
+              "type": "bool"
+            },
+            {
+              "name": "isAccepted",
               "type": "bool"
             }
           ]

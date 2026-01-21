@@ -186,7 +186,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-7xl lg:max-w-[80rem] max-h-[80vh] overflow-y-auto gap-6 bg-background">
+      <DialogContent className="max-w-7xl lg:max-w-[80rem] gap-4 p-6 bg-background">
         <DialogHeader className="space-y-2">
           <div className="flex items-center gap-2 text-primary">
             <Target className="size-5" />
@@ -215,7 +215,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
           <div className="space-y-4">
             <Card className="border-dashed">
               <CardHeader className="flex-row items-start gap-3">
-                <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                <div className="flex-shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
                   <Wallet className="size-5" />
                 </div>
                 <div className="space-y-1">
@@ -247,7 +247,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
 
             <Card className="border-dashed">
               <CardHeader className="flex-row items-start gap-3">
-                <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                <div className="flex-shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
                   <Wallet2 className="size-5" />
                 </div>
                 <div className="space-y-1">

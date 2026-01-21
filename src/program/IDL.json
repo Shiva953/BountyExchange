@@ -162,6 +162,11 @@
         "code": 6000,
         "name": "InvalidFeeWallet",
         "msg": "Invalid fee wallet"
+      },
+      {
+        "code": 6001,
+        "name": "RewardBelowMinimum",
+        "msg": "Minimum reward amount is 200 USDC"
       }
     ],
     "types": [
@@ -252,6 +257,10 @@
             },
             {
               "name": "is_active",
+              "type": "bool"
+            },
+            {
+              "name": "is_accepted",
               "type": "bool"
             }
           ]
