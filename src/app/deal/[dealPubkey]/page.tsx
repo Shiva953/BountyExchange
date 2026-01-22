@@ -10,6 +10,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { fetchTokenMetadata, TokenMetadata } from "@/utils/tokenMetadata";
 
+const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
+
 interface DealData {
   publicKey: PublicKey;
   dealId: string;
@@ -306,10 +308,21 @@ export default function DealPage() {
             <div>
               <h1 className="text-white text-3xl font-bold tracking-tight">{tokenName}</h1>
               <p className="text-gray-500 text-sm tracking-tight flex items-center gap-2">
-                {deal.token.toBase58().slice(0, 4)}...{deal.token.toBase58().slice(-3)}
+                <a
+                  href={`https://orb.helius.dev/account/${deal.token.toBase58()}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-gray-500 hover:text-white hover:underline transition-colors cursor-pointer"
+                >
+                  {deal.token.toBase58().slice(0, 4)}...{deal.token.toBase58().slice(-3)}
+                  <ArrowUpRight className="w-4 h-4" />
+                </a>
                 <button
-                  onClick={() => navigator.clipboard.writeText(deal.token.toBase58())}
-                  className="text-gray-500 hover:text-white transition-colors"
+                  onClick={() => {
+                    navigator.clipboard.writeText(deal.token.toBase58());
+                    toast.success("Copied Address");
+                  }}
+                  className="text-gray-500 hover:text-white transition-colors cursor-pointer"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -320,7 +333,7 @@ export default function DealPage() {
           </div>
           <div className="text-right">
             <p className="text-gray-500 text-xs tracking-tight mb-1">Claimable Reward</p>
-            <p className="text-[#c8ff00] font-bold text-4xl tracking-tight">{formatUSDC(deal.rewardAmount)}</p>
+            <p className="text-[#f5a0ac] font-bold text-4xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em", textShadow: "0 0 20px rgba(245, 160, 172, 0.4)" }}>{formatUSDC(deal.rewardAmount)}</p>
           </div>
         </div>
 
@@ -331,28 +344,28 @@ export default function DealPage() {
               <Target className="w-3 h-3" />
               Target Volume
             </div>
-            <p className="text-white font-semibold text-lg tracking-tight">{formatUSDC(deal.targetVolume)}</p>
+            <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatUSDC(deal.targetVolume)}</p>
           </div>
           <div className="bg-[#111] rounded-xl p-4 border border-white/10">
             <div className="flex items-center gap-2 text-gray-500 text-xs tracking-tight mb-2">
               <Clock className="w-3 h-3" />
               Hold Duration
             </div>
-            <p className="text-white font-semibold text-lg tracking-tight">{holdText}</p>
+            <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{holdText}</p>
           </div>
           <div className="bg-[#111] rounded-xl p-4 border border-white/10">
             <div className="flex items-center gap-2 text-gray-500 text-xs tracking-tight mb-2">
               <TrendingUp className="w-3 h-3" />
               Hold Ratio
             </div>
-            <p className="text-white font-semibold text-lg tracking-tight">80%</p>
+            <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>80%</p>
           </div>
           <div className="bg-[#111] rounded-xl p-4 border border-white/10">
             <div className="flex items-center gap-2 text-gray-500 text-xs tracking-tight mb-2">
               <Calendar className="w-3 h-3" />
               Expiry Deadline
             </div>
-            <p className="text-white font-semibold text-lg tracking-tight">
+            <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
               {formatExpiryDate(deal.createdAt, deal.expirationWindowInHours)}
             </p>
           </div>
@@ -365,10 +378,10 @@ export default function DealPage() {
             <div className="bg-[#111] rounded-xl p-6 border border-white/10">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-gray-500 text-xs tracking-tight">Bounty Goal: Volume</p>
-                <p className="text-white font-medium tracking-tight">{progressPercentage}%</p>
+                <p className="text-white font-medium" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{progressPercentage}%</p>
               </div>
               <div className="flex items-center gap-4">
-                <p className="text-white text-2xl font-bold tracking-tight">
+                <p className="text-white text-2xl font-bold" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
                   {formatUSDC(currentVolume)}
                   <span className="text-gray-500 text-lg font-normal ml-1">
                     /{formatUSDC(deal.targetVolume)}
@@ -387,10 +400,10 @@ export default function DealPage() {
             <div className="bg-[#111] rounded-xl p-6 border border-white/10">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-gray-500 text-xs tracking-tight">Bounty Goal: Hold Duration</p>
-                <p className="text-white font-medium tracking-tight">{holdProgressPercentage}%</p>
+                <p className="text-white font-medium" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{holdProgressPercentage}%</p>
               </div>
               <div className="flex items-center gap-4">
-                <p className="text-white text-2xl font-bold tracking-tight">
+                <p className="text-white text-2xl font-bold" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
                   {currentHoldHours}
                   <span className="text-gray-500 text-lg font-normal ml-1">/{holdText}</span>
                 </p>

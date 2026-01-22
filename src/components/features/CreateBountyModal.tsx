@@ -17,7 +17,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -214,22 +213,24 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-7xl lg:max-w-[80rem] gap-4 p-6 bg-background">
+      <DialogContent
+        className="max-w-7xl lg:max-w-[80rem] gap-4 p-6 bg-background rounded-none border-2 border-[#e84057]"
+        style={{ fontFamily: 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace' }}
+      >
         <DialogHeader className="space-y-2">
           <div className="flex items-center gap-2 text-primary">
             <Target className="size-5" />
-            <DialogTitle className="text-2xl">Bounty configuration</DialogTitle>
+            <DialogTitle className="text-2xl tracking-tight">Bounty configuration</DialogTitle>
           </div>
-          <DialogDescription>Verified performance</DialogDescription>
-        </DialogHeader>
+                  </DialogHeader>
 
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={onClose} className="gap-2 cursor-pointer">
+          <Button variant="ghost" size="sm" onClick={onClose} className="gap-2 cursor-pointer tracking-tight">
             <ArrowLeft className="size-4" />
-            Abort configuration
+            Back
           </Button>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Draft status</span>
+            <span className="text-sm text-muted-foreground tracking-tight">Draft status</span>
             <Badge
               variant={isFormValid ? "default" : "outline"}
               className={isFormValid ? "bg-emerald-500 text-emerald-950" : ""}
@@ -241,42 +242,42 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
 
         <div className="grid gap-6 lg:grid-cols-[2.1fr_1fr]">
           <div className="space-y-4">
-            <Card className="border-dashed">
+            <Card className="rounded-none border-solid border-[#e84057]/30 bg-[#e84057]/5">
               <CardHeader>
-                <CardTitle className="text-base">Token & Trader</CardTitle>
-                <CardDescription>Define token contract and target trader.</CardDescription>
+                <CardTitle className="text-base tracking-tight">Token & Trader</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="contractAddress">Token CA</Label>
+                  <Label htmlFor="contractAddress" className="tracking-tight">Token CA</Label>
                   <Input
                     id="contractAddress"
                     placeholder="Paste CA..."
                     value={formData.contractAddress}
                     onChange={(e) => handleInputChange("contractAddress", e.target.value)}
+                    className="rounded-none"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="traderWallet">Target Trader</Label>
+                  <Label htmlFor="traderWallet" className="tracking-tight">Target Trader</Label>
                   <Input
                     id="traderWallet"
                     placeholder="Wallet address..."
                     value={formData.traderWallet}
                     onChange={(e) => handleInputChange("traderWallet", e.target.value)}
+                    className="rounded-none"
                   />
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="border-dashed">
+            <Card className="rounded-none border-solid border-[#e84057]/30 bg-[#e84057]/5">
               <CardHeader>
-                <CardTitle className="text-base">Reward & Conditions</CardTitle>
-                <CardDescription>Set the reward, target volume, and timing.</CardDescription>
+                <CardTitle className="text-base tracking-tight">Reward & Conditions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="rewardAmount">Reward ($)</Label>
+                    <Label htmlFor="rewardAmount" className="tracking-tight">Reward ($)</Label>
                     <Input
                       id="rewardAmount"
                       type="number"
@@ -284,10 +285,11 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                       placeholder="0"
                       value={formData.rewardAmount}
                       onChange={(e) => handleInputChange("rewardAmount", e.target.value)}
+                      className="rounded-none"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="volumeTarget">Target Volume ($)</Label>
+                    <Label htmlFor="volumeTarget" className="tracking-tight">Target Volume ($)</Label>
                     <Input
                       id="volumeTarget"
                       type="number"
@@ -295,13 +297,14 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                       placeholder="0"
                       value={formData.volumeTarget}
                       onChange={(e) => handleInputChange("volumeTarget", e.target.value)}
+                      className="rounded-none"
                     />
                   </div>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
-                    <Label htmlFor="expirationWindow">Expiration Window (hrs)</Label>
+                    <Label htmlFor="expirationWindow" className="tracking-tight">Expiration Window (hrs)</Label>
                     <Input
                       id="expirationWindow"
                       type="number"
@@ -309,10 +312,11 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                       placeholder="0"
                       value={formData.expirationWindow}
                       onChange={(e) => handleInputChange("expirationWindow", e.target.value)}
+                      className="rounded-none"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="holdDuration">Hold Duration (hrs)</Label>
+                    <Label htmlFor="holdDuration" className="tracking-tight">Hold Duration (hrs)</Label>
                     <Input
                       id="holdDuration"
                       type="number"
@@ -320,11 +324,12 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                       placeholder="0"
                       value={formData.holdDuration}
                       onChange={(e) => handleInputChange("holdDuration", e.target.value)}
+                      className="rounded-none"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="holdRatio">Hold Ratio (%)</Label>
-                    <Input id="holdRatio" value={holdRatio} placeholder="—" readOnly />
+                    <Label htmlFor="holdRatio" className="tracking-tight">Hold Ratio (%)</Label>
+                    <Input id="holdRatio" value={holdRatio} placeholder="—" readOnly className="rounded-none" />
                   </div>
                 </div>
               </CardContent>
@@ -332,7 +337,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
           </div>
 
           <div className="space-y-4">
-            <Card>
+            <Card className="rounded-none border-solid border-[#e84057]/30 bg-[#e84057]/5">
               <CardHeader className="space-y-3">
                 <div className="flex items-center gap-2 text-primary">
                   <CheckCircle2 className="size-4" />
@@ -344,11 +349,11 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center justify-between text-sm tracking-tight">
                     <span className="text-muted-foreground">Base reward</span>
                     <span className="font-semibold">${formData.rewardAmount || "0"}</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center justify-between text-sm tracking-tight">
                     <span className="text-muted-foreground">Protocol tax (10%)</span>
                     <span className="font-semibold">${protocolTax}</span>
                   </div>
@@ -361,14 +366,14 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                     <p className="text-xs tracking-tight text-muted-foreground">
                       Total Escrow
                     </p>
-                    <p className="text-3xl font-bold leading-none">${totalEscrow}</p>
+                    <p className="text-3xl font-bold leading-none tracking-tight">${totalEscrow}</p>
                   </div>
                   <Badge variant="secondary">Devnet</Badge>
                 </div>
 
                 <Button
                   size="lg"
-                  className="w-full cursor-pointer"
+                  className="w-full cursor-pointer tracking-tight"
                   disabled={isButtonDisabled}
                   onClick={handleCreateBounty}
                 >
@@ -380,7 +385,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                 </Button>
 
                 {txError && (
-                  <p className="text-sm text-destructive" role="alert">
+                  <p className="text-sm text-destructive tracking-tight" role="alert">
                     {txError}
                   </p>
                 )}
@@ -389,7 +394,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                   <Button
                     variant="link"
                     asChild
-                    className="px-0 text-sm font-semibold text-primary cursor-pointer"
+                    className="px-0 text-sm font-semibold text-primary cursor-pointer tracking-tight"
                   >
                     <a
                       href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}

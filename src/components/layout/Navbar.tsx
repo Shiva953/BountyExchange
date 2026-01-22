@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { Home, FileText } from "lucide-react";
+import { Home, ShoppingBag } from "lucide-react";
 
 const WalletMultiButton = dynamic(
   () =>
@@ -45,7 +45,7 @@ export const Navbar = () => {
                   : "text-zinc-500 dark:text-zinc-400 hover:bg-[#2a1a1a]/80 hover:!text-[#ff6b8a]"
               }`}
             >
-              <FileText className="w-4 h-4" />
+              <ShoppingBag className="w-4 h-4" />
               My Deals
             </Link>
           )}

@@ -5,23 +5,24 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useDealsForTrader, DealWithMetadata } from "@/hooks/useDealsForTrader";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Clock, Target } from "lucide-react";
+import { ChevronLeft, ChevronRight, Target } from "lucide-react";
 
 // Using 9 decimals for stored amounts
 const USDC_DECIMALS = 9;
+const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
 
 function formatUSDC(amount: bigint | number): string {
   const value = Number(amount) / 10 ** USDC_DECIMALS;
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}K`;
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
   }
   return `$${value.toLocaleString()}`;
 }
 
 function formatVolume(amount: bigint | number): string {
   const value = Number(amount) / 10 ** USDC_DECIMALS;
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}K`;
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1)}M`;
   }
   return `$${value.toLocaleString()}`;
 }
@@ -38,10 +39,6 @@ function DealCard({ deal, onClick }: DealCardProps) {
   const tokenImage = deal.tokenMetadata?.image || "";
 
   console.log("[DealCard] Token metadata:", { tokenName, tokenSymbol, tokenImage, fullMetadata: deal.tokenMetadata });
-
-  const holdPercentage = 100; // Default to 100% as shown in the design
-  const holdDuration = Number(deal.holdDurationInHours);
-  const holdText = `${holdDuration} hour${holdDuration !== 1 ? 's' : ''}`;
 
   const showFallback = !tokenImage || imageError;
 
@@ -78,28 +75,24 @@ function DealCard({ deal, onClick }: DealCardProps) {
         </div>
         <div className="text-right">
           <p className="text-gray-500 text-xs tracking-tight mb-1">Reward</p>
-          <p className="text-[#c8ff00] font-bold text-2xl">{formatUSDC(deal.rewardAmount.toNumber())}</p>
+          <p className="text-[#f5a0ac] font-bold text-2xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em", textShadow: "0 0 20px rgba(245, 160, 172, 0.4)" }}>{formatUSDC(deal.rewardAmount.toNumber())}</p>
         </div>
       </div>
 
       {/* Stats: Target Volume and Expires */}
-      <div className="flex gap-8 mb-5">
-        <div>
-          <p className="text-gray-500 text-xs tracking-tight mb-1">Target Volume</p>
-          <p className="text-white font-semibold text-xl">{formatVolume(deal.targetVolume.toNumber())}</p>
+      <div className="flex justify-center gap-8 mb-5">
+        <div className="text-center">
+          <p className="text-gray-500 text-[11px] tracking-tight">Target Volume</p>
+          <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatVolume(deal.targetVolume.toNumber())}</p>
         </div>
-        <div>
-          <p className="text-gray-500 text-xs tracking-tight mb-1">Expires in</p>
-          <p className="text-white font-semibold text-xl">{deal.expirationWindowInHours.toNumber()}h</p>
+        <div className="text-center">
+          <p className="text-gray-500 text-[11px] tracking-tight">Expires in</p>
+          <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{deal.expirationWindowInHours.toNumber()}h</p>
         </div>
       </div>
 
-      {/* Footer: Hold info */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-gray-400 text-sm">
-          <Clock className="w-4 h-4" />
-          <span>Hold {holdPercentage}% for {holdText}</span>
-        </div>
+      {/* Footer: View button */}
+      <div className="flex items-center justify-center">
         <Button
           className="bg-white text-black hover:bg-gray-200 font-semibold px-6 py-2 rounded-lg text-sm cursor-pointer"
         >
@@ -144,11 +137,25 @@ function LoadingCard() {
   );
 }
 
-export function DealCarousel() {
+interface DealCarouselProps {
+  searchQuery?: string;
+}
+
+export function DealCarousel({ searchQuery = "" }: DealCarouselProps) {
   const router = useRouter();
   const { publicKey } = useWallet();
   const { deals, loading, error } = useDealsForTrader();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Filter deals based on search query (token name, symbol, or address)
+  const filteredDeals = deals.filter((deal) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const tokenName = deal.tokenMetadata?.name?.toLowerCase() || "";
+    const tokenSymbol = deal.tokenMetadata?.symbol?.toLowerCase() || "";
+    const tokenAddress = deal.token.toBase58().toLowerCase();
+    return tokenName.includes(query) || tokenSymbol.includes(query) || tokenAddress.includes(query);
+  });
 
   const handleCardClick = (deal: DealWithMetadata) => {
     router.push(`/deal/${deal.publicKey.toBase58()}`);
@@ -185,7 +192,7 @@ export function DealCarousel() {
       {/* Carousel */}
       <div className="relative">
         {/* Navigation buttons */}
-        {deals.length > 2 && (
+        {filteredDeals.length > 2 && (
           <>
             <button
               onClick={() => scroll("left")}
@@ -208,22 +215,20 @@ export function DealCarousel() {
           className="flex gap-5 overflow-x-auto scrollbar-hide pb-2"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
-          {loading ? (
+          {loading || error ? (
             <>
               <LoadingCard />
               <LoadingCard />
               <LoadingCard />
             </>
-          ) : error ? (
-            <div className="flex-shrink-0 w-[340px] bg-[#1a1a1a] rounded-2xl p-5 border border-red-500/30 flex items-center justify-center min-h-[200px]">
-              <p className="text-red-400">{error}</p>
-            </div>
-          ) : deals.length === 0 ? (
+          ) : filteredDeals.length === 0 ? (
             <div className="flex-shrink-0 w-[340px] bg-[#1a1a1a] rounded-2xl p-5 border border-[#2a2a2a] border-dashed flex items-center justify-center min-h-[200px]">
-              <p className="text-gray-500 text-lg font-medium">No bounties available</p>
+              <p className="text-gray-500 text-lg font-medium">
+                {searchQuery ? "No matching bounties" : "No bounties available"}
+              </p>
             </div>
           ) : (
-            deals.map((deal) => (
+            filteredDeals.map((deal) => (
               <DealCard key={deal.publicKey.toBase58()} deal={deal} onClick={handleCardClick} />
             ))
           )}

@@ -171,6 +171,193 @@ export type BountyExchangeProgram = {
             }
           }
         ]
+      },
+      {
+        "name": "finalizeDeal",
+        "discriminator": [
+          20,
+          13,
+          62,
+          64,
+          17,
+          110,
+          130,
+          148
+        ],
+        "accounts": [
+          {
+            "name": "trader",
+            "writable": true,
+            "signer": true
+          },
+          {
+            "name": "creator"
+          },
+          {
+            "name": "deal",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "const",
+                  "value": [
+                    100,
+                    101,
+                    97,
+                    108
+                  ]
+                },
+                {
+                  "kind": "account",
+                  "path": "creator"
+                },
+                {
+                  "kind": "account",
+                  "path": "deal.deal_id",
+                  "account": "deal"
+                }
+              ]
+            }
+          },
+          {
+            "name": "escrowVault",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "account",
+                  "path": "deal"
+                },
+                {
+                  "kind": "account",
+                  "path": "tokenProgram"
+                },
+                {
+                  "kind": "account",
+                  "path": "usdcMint"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  140,
+                  151,
+                  37,
+                  143,
+                  78,
+                  36,
+                  137,
+                  241,
+                  187,
+                  61,
+                  16,
+                  41,
+                  20,
+                  142,
+                  13,
+                  131,
+                  11,
+                  90,
+                  19,
+                  153,
+                  218,
+                  255,
+                  16,
+                  132,
+                  4,
+                  142,
+                  123,
+                  216,
+                  219,
+                  233,
+                  248,
+                  89
+                ]
+              }
+            }
+          },
+          {
+            "name": "traderTokenAccount",
+            "writable": true,
+            "pda": {
+              "seeds": [
+                {
+                  "kind": "account",
+                  "path": "trader"
+                },
+                {
+                  "kind": "account",
+                  "path": "tokenProgram"
+                },
+                {
+                  "kind": "account",
+                  "path": "usdcMint"
+                }
+              ],
+              "program": {
+                "kind": "const",
+                "value": [
+                  140,
+                  151,
+                  37,
+                  143,
+                  78,
+                  36,
+                  137,
+                  241,
+                  187,
+                  61,
+                  16,
+                  41,
+                  20,
+                  142,
+                  13,
+                  131,
+                  11,
+                  90,
+                  19,
+                  153,
+                  218,
+                  255,
+                  16,
+                  132,
+                  4,
+                  142,
+                  123,
+                  216,
+                  219,
+                  233,
+                  248,
+                  89
+                ]
+              }
+            }
+          },
+          {
+            "name": "usdcMint"
+          },
+          {
+            "name": "tokenProgram"
+          },
+          {
+            "name": "associatedTokenProgram",
+            "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+          },
+          {
+            "name": "systemProgram",
+            "address": "11111111111111111111111111111111"
+          }
+        ],
+        "args": [
+          {
+            "name": "args",
+            "type": {
+              "defined": {
+                "name": "finalizeDealArgs"
+              }
+            }
+          }
+        ]
       }
     ],
     "accounts": [
@@ -218,6 +405,36 @@ export type BountyExchangeProgram = {
         "code": 6005,
         "name": "selfTargetedDeal",
         "msg": "Cannot create a bounty targeting yourself"
+      },
+      {
+        "code": 6006,
+        "name": "dealNotAccepted",
+        "msg": "Deal has not been accepted yet"
+      },
+      {
+        "code": 6007,
+        "name": "invalidCreator",
+        "msg": "Invalid creator account"
+      },
+      {
+        "code": 6008,
+        "name": "invalidEscrowVault",
+        "msg": "Invalid escrow vault"
+      },
+      {
+        "code": 6009,
+        "name": "dealExpired",
+        "msg": "Deal has expired"
+      },
+      {
+        "code": 6010,
+        "name": "volumeRequirementNotMet",
+        "msg": "Volume requirement not met"
+      },
+      {
+        "code": 6011,
+        "name": "holdDurationRequirementNotMet",
+        "msg": "Hold duration requirement not met"
       }
     ],
     "types": [
@@ -313,6 +530,22 @@ export type BountyExchangeProgram = {
             {
               "name": "isAccepted",
               "type": "bool"
+            }
+          ]
+        }
+      },
+      {
+        "name": "finalizeDealArgs",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "volumeAtEndTime",
+              "type": "u64"
+            },
+            {
+              "name": "holdDurationAtEndTime",
+              "type": "u64"
             }
           ]
         }

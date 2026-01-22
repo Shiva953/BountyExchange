@@ -6,6 +6,8 @@ import { useAcceptedDeals } from "@/hooks/useAcceptedDeals";
 import { DealWithMetadata } from "@/hooks/useDealsForTrader";
 import { Clock, TrendingUp, Zap } from "lucide-react";
 
+const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
+
 interface MyDealsPageProps {
   params: Promise<{
     walletAddress: string;
@@ -19,9 +21,6 @@ function formatUSDC(amount: bigint | number): string {
   if (value >= 1_000_000) {
     return `$${(value / 1_000_000).toFixed(1)}M`;
   }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}K`;
-  }
   return `$${value.toLocaleString()}`;
 }
 
@@ -29,9 +28,6 @@ function formatVolume(amount: bigint | number): string {
   const value = Number(amount) / 10 ** USDC_DECIMALS;
   if (value >= 1_000_000) {
     return `$${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(0)}K`;
   }
   return `$${value.toLocaleString()}`;
 }
@@ -51,7 +47,7 @@ function ProfileCard({ walletAddress, activeBounties, volumeCompleted }: Profile
     <div
       className="w-full rounded-2xl p-6 border border-white/10 mb-8"
       style={{
-        background: "linear-gradient(135deg, rgba(40,40,40,0.8) 0%, rgba(20,20,20,0.9) 100%)",
+        background: "#0a0a0a",
       }}
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -76,7 +72,7 @@ function ProfileCard({ walletAddress, activeBounties, volumeCompleted }: Profile
               href={`https://solscan.io/account/${walletAddress}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-white font-bold text-2xl mb-1 font-mono tracking-tight hover:underline transition-all cursor-pointer"
+              className="text-white font-semibold text-2xl mb-1 font-mono tracking-tight hover:underline transition-all cursor-pointer"
               style={{
                 textShadow: "0 0 0px rgba(255, 255, 255, 0)",
                 transition: "text-shadow 0.2s ease",
@@ -90,7 +86,7 @@ function ProfileCard({ walletAddress, activeBounties, volumeCompleted }: Profile
             >
               {truncateAddress(walletAddress)}
             </a>
-            <span className="inline-block px-3 py-1 bg-[#c8ff00]/20 text-[#c8ff00] text-xs font-semibold rounded-full mx-3">
+            <span className="inline-block px-3 py-1 bg-[#f5a0ac]/20 text-[#f5a0ac] text-xs font-semibold rounded-full mx-3">
               Trader
             </span>
           </div>
@@ -100,20 +96,20 @@ function ProfileCard({ walletAddress, activeBounties, volumeCompleted }: Profile
         <div className="flex gap-8">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-[#c8ff00]" />
+              <TrendingUp className="w-5 h-5 text-[#f5a0ac]" />
             </div>
             <div>
               <p className="text-zinc-500 text-xs tracking-tight">Volume Completed</p>
-              <p className="text-white font-bold text-xl tracking-tight">{formatVolume(volumeCompleted)}</p>
+              <p className="text-white font-bold text-xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatVolume(volumeCompleted)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
-              <Zap className="w-5 h-5 text-[#c8ff00]" />
+              <Zap className="w-5 h-5 text-[#f5a0ac]" />
             </div>
             <div>
               <p className="text-zinc-500 text-xs tracking-tight">Active Bounties</p>
-              <p className="text-white font-bold text-xl tracking-tight">{activeBounties}</p>
+              <p className="text-white font-bold text-xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{activeBounties}</p>
             </div>
           </div>
         </div>
@@ -209,7 +205,7 @@ function DealCard({ deal, isCompleted = false }: DealCardProps) {
         </div>
         <div className="text-right">
           <p className="text-zinc-500 text-xs tracking-tight mb-1">Reward</p>
-          <p className="text-[#c8ff00] font-bold text-2xl tracking-tight">
+          <p className="text-[#f5a0ac] font-bold text-2xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em", textShadow: "0 0 20px rgba(245, 160, 172, 0.4)" }}>
             {formatUSDC(deal.rewardAmount.toNumber())}
           </p>
         </div>
@@ -219,13 +215,13 @@ function DealCard({ deal, isCompleted = false }: DealCardProps) {
       <div className="grid grid-cols-2 gap-4 mb-5">
         <div className="bg-white/5 rounded-xl p-3">
           <p className="text-zinc-500 text-xs tracking-tight mb-1">Target Volume</p>
-          <p className="text-white font-semibold text-lg tracking-tight">
+          <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
             {formatVolume(deal.targetVolume.toNumber())}
           </p>
         </div>
         <div className="bg-white/5 rounded-xl p-3">
           <p className="text-zinc-500 text-xs tracking-tight mb-1">Status</p>
-          <p className={`font-semibold text-lg tracking-tight ${isCompleted ? "text-green-400" : "text-[#c8ff00]"}`}>
+          <p className={`font-semibold text-lg tracking-tight ${isCompleted ? "text-green-400" : "text-[#f5a0ac]"}`}>
             {isCompleted ? "Completed" : "Live"}
           </p>
         </div>
@@ -238,14 +234,14 @@ function DealCard({ deal, isCompleted = false }: DealCardProps) {
             <Clock className="w-4 h-4" />
             <span>{isCompleted ? "Completed" : "In Progress"}</span>
           </div>
-          <span className="text-zinc-400 text-sm tracking-tight">
+          <span className="text-zinc-400 text-sm" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
             {formatVolume(progressAmount)} done
           </span>
         </div>
         <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all ${
-              isCompleted ? "bg-green-500" : "bg-[#c8ff00]"
+              isCompleted ? "bg-green-500" : "bg-[#f5a0ac]"
             }`}
             style={{ width: `${progress}%` }}
           />
@@ -255,7 +251,7 @@ function DealCard({ deal, isCompleted = false }: DealCardProps) {
       {/* Footer */}
       <div className="flex items-center gap-2 text-zinc-500 text-sm tracking-tight">
         <Clock className="w-4 h-4" />
-        <span>Hold 80% for {holdText}</span>
+        <span style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>Hold 80% for {holdText}</span>
       </div>
     </Link>
   );
