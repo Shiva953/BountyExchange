@@ -168,7 +168,15 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       }, 1200);
     } catch (error) {
       setTxStatus("error");
-      setTxError(error instanceof Error ? error.message : "Unknown error occurred");
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+
+      // Check for RewardBelowMinimum error (code 6001)
+      if (errorMessage.includes("6001") || errorMessage.includes("RewardBelowMinimum") || errorMessage.includes("Minimum reward amount")) {
+        toast.error("Minimum reward amount is 200 USDC");
+        setTxError("Minimum reward amount is 200 USDC");
+      } else {
+        setTxError(errorMessage);
+      }
     }
   }, [publicKey, signTransaction, isFormValid, formData, connection, onClose]);
 

@@ -306,7 +306,7 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
 
   return (
     <main className="min-h-screen pt-24 px-6 bg-black">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-6xl mt-6 mx-auto">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white tracking-tight">My Deals</h1>
