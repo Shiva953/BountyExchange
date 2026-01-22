@@ -213,6 +213,11 @@ export type BountyExchangeProgram = {
         "code": 6004,
         "name": "dealAlreadyAccepted",
         "msg": "Deal has already been accepted"
+      },
+      {
+        "code": 6005,
+        "name": "selfTargetedDeal",
+        "msg": "Cannot create a bounty targeting yourself"
       }
     ],
     "types": [
@@ -313,5 +318,4 @@ export type BountyExchangeProgram = {
         }
       }
     ]
-  };
-  
+  };  

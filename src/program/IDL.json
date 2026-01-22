@@ -207,6 +207,11 @@
         "code": 6004,
         "name": "DealAlreadyAccepted",
         "msg": "Deal has already been accepted"
+      },
+      {
+        "code": 6005,
+        "name": "SelfTargetedDeal",
+        "msg": "Cannot create a bounty targeting yourself"
       }
     ],
     "types": [

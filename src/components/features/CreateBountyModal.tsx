@@ -174,6 +174,10 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       if (errorMessage.includes("6001") || errorMessage.includes("RewardBelowMinimum") || errorMessage.includes("Minimum reward amount")) {
         toast.error("Minimum reward amount is 200 USDC");
         setTxError("Minimum reward amount is 200 USDC");
+      // Check for SelfTargetedDeal error (code 6005)
+      } else if (errorMessage.includes("6005") || errorMessage.includes("SelfTargetedDeal") || errorMessage.includes("targeting yourself")) {
+        toast.error("Cannot create a bounty targeting yourself");
+        setTxError("Cannot create a bounty targeting yourself");
       } else {
         setTxError(errorMessage);
       }
