@@ -3,7 +3,8 @@
 import { useState, useCallback } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Transaction } from "@solana/web3.js";
-import { ArrowLeft, CheckCircle2, Loader2, Target } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, CheckCircle2, Loader2, Target } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -137,6 +138,21 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
 
       setTxStatus("success");
       setTxSignature(signature);
+
+      toast.success(
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">Bounty Created Successfully</span>
+          <a
+            href={`https://explorer.solana.com/tx/${signature}?cluster=devnet`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            View on Explorer
+            <ArrowUpRight className="w-3 h-3" />
+          </a>
+        </div>
+      );
 
       setTimeout(() => {
         setFormData({

@@ -8,12 +8,7 @@ import { getProgram } from "@/program/instructions/createDeal";
 import { ArrowLeft, Clock, Target, Calendar, TrendingUp, Check, Loader2, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
-
-interface TokenMetadata {
-  name: string;
-  symbol: string;
-  image: string;
-}
+import { fetchTokenMetadata, TokenMetadata } from "@/utils/tokenMetadata";
 
 interface DealData {
   publicKey: PublicKey;
@@ -35,70 +30,6 @@ interface DealData {
 type ButtonState = "idle" | "loading" | "success";
 
 const USDC_DECIMALS = 9;
-const JUPITER_TOKEN_API = "https://lite-api.jup.ag/tokens/v1/token";
-const HELIUS_MAINNET_RPC = "https://mainnet.helius-rpc.com/?api-key=017f56ed-c6c1-480a-8c11-dbc09ab2358d";
-
-async function fetchTokenMetadataFromJupiter(mintAddress: string): Promise<TokenMetadata | null> {
-  try {
-    const response = await fetch(`${JUPITER_TOKEN_API}/${mintAddress}`);
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (data && data.symbol) {
-      return {
-        name: data.name || data.symbol || "Unknown Token",
-        symbol: data.symbol || "???",
-        image: data.logoURI || data.icon || "",
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-async function fetchTokenMetadataFromHelius(mintAddress: string): Promise<TokenMetadata | null> {
-  try {
-    const response = await fetch(HELIUS_MAINNET_RPC, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: "get-asset",
-        method: "getAsset",
-        params: { id: mintAddress, displayOptions: { showFungible: true } },
-      }),
-    });
-    const data = await response.json();
-    if (data.error) return null;
-    if (data.result) {
-      const result = data.result;
-      const content = result.content;
-      return {
-        name: content?.metadata?.name || result.token_info?.symbol || "Unknown Token",
-        symbol: content?.metadata?.symbol || result.token_info?.symbol || "???",
-        image: content?.links?.image || content?.files?.[0]?.cdn_uri || content?.files?.[0]?.uri || "",
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-async function fetchTokenMetadata(mintAddress: string): Promise<TokenMetadata | null> {
-  let metadata = await fetchTokenMetadataFromJupiter(mintAddress);
-  if (!metadata || !metadata.image) {
-    const heliusMetadata = await fetchTokenMetadataFromHelius(mintAddress);
-    if (heliusMetadata) {
-      metadata = {
-        name: metadata?.name || heliusMetadata.name,
-        symbol: metadata?.symbol || heliusMetadata.symbol,
-        image: metadata?.image || heliusMetadata.image,
-      };
-    }
-  }
-  return metadata;
-}
 
 function formatUSDC(amount: number): string {
   const value = amount / 10 ** USDC_DECIMALS;
@@ -299,8 +230,11 @@ export default function DealPage() {
   const holdDuration = deal.holdDurationInHours;
   const holdText = `${holdDuration} hour${holdDuration !== 1 ? "s" : ""}`;
 
-  const progressPercentage = 64;
-  const holdProgressPercentage = 500;
+  // TODO: Replace with real progress data from on-chain tracking
+  const progressPercentage = 0;
+  const currentVolume = 0;
+  const holdProgressPercentage = 0;
+  const currentHoldHours = 0;
 
   const getButtonContent = () => {
     switch (buttonState) {
@@ -424,69 +358,70 @@ export default function DealPage() {
           </div>
         </div>
 
-        {/* Progress Sections */}
-        <div className="space-y-6 mb-10">
-          {/* Volume Progress */}
-          <div className="bg-[#111] rounded-xl p-6 border border-white/10">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-gray-500 text-xs tracking-tight">Bounty Goal: Volume</p>
-              <p className="text-white font-medium tracking-tight">{progressPercentage}%</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <p className="text-white text-2xl font-bold tracking-tight">
-                {formatUSDC(deal.targetVolume * 0.64)}
-                <span className="text-gray-500 text-lg font-normal ml-1">
-                  /{formatUSDC(deal.targetVolume)}
-                </span>
-              </p>
-              <div className="flex-1 h-1 bg-[#2a2a2a] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white rounded-full"
-                  style={{ width: `${progressPercentage}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Hold Duration Progress */}
-          <div className="bg-[#111] rounded-xl p-6 border border-white/10">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-gray-500 text-xs tracking-tight">Bounty Goal: Hold Duration</p>
-              <p className="text-white font-medium tracking-tight">{holdProgressPercentage}%</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <p className="text-white text-2xl font-bold tracking-tight">
-                5
-                <span className="text-gray-500 text-lg font-normal ml-1">/{holdText}</span>
-              </p>
-              <div className="flex-1 h-1 bg-[#2a2a2a] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white rounded-full"
-                  style={{ width: `${Math.min(holdProgressPercentage, 100)}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Accept Button */}
-        <button
-          onClick={handleAcceptBounty}
-          disabled={buttonState !== "idle" || !publicKey || deal.isAccepted || !deal.isActive}
-          className={getButtonStyles()}
-        >
-          {getButtonContent()}
-        </button>
-
-        {!publicKey && (
-          <p className="text-center text-gray-500 mt-4 text-sm tracking-tight">
-            Connect your wallet to accept this bounty
-          </p>
-        )}
+        {/* Progress Sections - Only show when deal is accepted */}
         {deal.isAccepted && (
-          <p className="text-center text-yellow-500 mt-4 text-sm tracking-tight">
-            This bounty has already been accepted
-          </p>
+          <div className="space-y-6 mb-10">
+            {/* Volume Progress */}
+            <div className="bg-[#111] rounded-xl p-6 border border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-gray-500 text-xs tracking-tight">Bounty Goal: Volume</p>
+                <p className="text-white font-medium tracking-tight">{progressPercentage}%</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <p className="text-white text-2xl font-bold tracking-tight">
+                  {formatUSDC(currentVolume)}
+                  <span className="text-gray-500 text-lg font-normal ml-1">
+                    /{formatUSDC(deal.targetVolume)}
+                  </span>
+                </p>
+                <div className="flex-1 h-1 bg-[#2a2a2a] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white rounded-full"
+                    style={{ width: `${progressPercentage}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Hold Duration Progress */}
+            <div className="bg-[#111] rounded-xl p-6 border border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-gray-500 text-xs tracking-tight">Bounty Goal: Hold Duration</p>
+                <p className="text-white font-medium tracking-tight">{holdProgressPercentage}%</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <p className="text-white text-2xl font-bold tracking-tight">
+                  {currentHoldHours}
+                  <span className="text-gray-500 text-lg font-normal ml-1">/{holdText}</span>
+                </p>
+                <div className="flex-1 h-1 bg-[#2a2a2a] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white rounded-full"
+                    style={{ width: `${Math.min(holdProgressPercentage, 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Accept Button - Only show when deal is not yet accepted */}
+        {!deal.isAccepted && (
+          <>
+            <button
+              onClick={handleAcceptBounty}
+              disabled={buttonState !== "idle" || !publicKey || !deal.isActive}
+              className={getButtonStyles()}
+            >
+              {getButtonContent()}
+            </button>
+
+            {!publicKey && (
+              <p className="text-center text-gray-500 mt-4 text-sm tracking-tight">
+                Connect your wallet to accept this bounty
+              </p>
+            )}
+          </>
         )}
         {!deal.isActive && (
           <p className="text-center text-red-500 mt-4 text-sm tracking-tight">
