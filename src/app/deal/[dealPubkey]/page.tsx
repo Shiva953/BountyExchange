@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction } from "@solana/web3.js";
 import { getProgram } from "@/program/instructions/createDeal";
-import { ArrowLeft, Clock, Target, Calendar, TrendingUp, Check, Loader2, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, Clock, Target, Calendar, TrendingUp, Check, Loader2, ArrowUpRight, RefreshCw } from "lucide-react";
+import { useVolumeProgress } from "@/hooks/useVolumeProgress";
 import Link from "next/link";
 import { toast } from "sonner";
 import { fetchTokenMetadata, TokenMetadata } from "@/utils/tokenMetadata";
@@ -37,6 +38,16 @@ const USDC_DECIMALS = 9;
 function formatUSDC(amount: number): string {
   const value = amount / 10 ** USDC_DECIMALS;
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+function formatVolumeUSD(amount: number): string {
+  if (amount >= 1_000_000) {
+    return `$${(amount / 1_000_000).toFixed(1)}M`;
+  }
+  if (amount >= 1000) {
+    return `$${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+  return `$${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 function formatExpiryDate(createdAt: number, expirationWindowInHours: number): string {
@@ -166,6 +177,15 @@ export default function DealPage() {
     fetchDeal();
   }, [dealPubkey, connection]);
 
+  // Fetch real volume progress when deal is accepted
+  // Must be called unconditionally (before any early returns) to follow Rules of Hooks
+  const { volumeUSD, loading: volumeLoading, refetch: refetchVolume } = useVolumeProgress({
+    walletAddress: deal?.trader.toBase58() ?? "",
+    tokenMint: deal?.token.toBase58() ?? "",
+    startTime: deal?.createdAt,
+    enabled: Boolean(deal?.isAccepted),
+  });
+
   const handleAcceptBounty = async () => {
     if (!publicKey || !signTransaction || !deal || buttonState !== "idle") return;
 
@@ -237,9 +257,12 @@ export default function DealPage() {
   const holdDuration = deal.holdDurationInHours;
   const holdText = `${holdDuration} hour${holdDuration !== 1 ? "s" : ""}`;
 
-  // TODO: Replace with real progress data from on-chain tracking
-  const progressPercentage = 0;
-  const currentVolume = 0;
+  // Calculate volume progress
+  const targetVolumeUSD = deal.targetVolume / 10 ** USDC_DECIMALS;
+  const progressPercentage = Math.min(100, Math.round((volumeUSD / targetVolumeUSD) * 100));
+  const currentVolume = volumeUSD;
+
+  // TODO: Implement hold duration tracking
   const holdProgressPercentage = 0;
   const currentHoldHours = 0;
 
@@ -387,19 +410,38 @@ export default function DealPage() {
             {/* Volume Progress */}
             <div className="bg-[#111] rounded-xl p-6 border border-white/10">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-gray-500 text-xs tracking-tight">Bounty Goal: Volume</p>
-                <p className="text-white font-medium" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{progressPercentage}%</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-gray-500 text-xs tracking-tight">Bounty Goal: Volume</p>
+                  <button
+                    onClick={() => refetchVolume()}
+                    disabled={volumeLoading}
+                    className="text-gray-500 hover:text-white transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${volumeLoading ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
+                {volumeLoading ? (
+                  <div className="h-5 w-10 bg-[#2a2a2a] rounded animate-pulse" />
+                ) : (
+                  <p className="text-white font-medium" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
+                    {progressPercentage}%
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-4">
-                <p className="text-white text-2xl font-bold" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
-                  {formatUSDC(currentVolume)}
-                  <span className="text-gray-500 text-lg font-normal ml-1">
-                    /{formatUSDC(deal.targetVolume)}
-                  </span>
-                </p>
+                {volumeLoading ? (
+                  <div className="h-8 w-40 bg-[#2a2a2a] rounded animate-pulse" />
+                ) : (
+                  <p className="text-white text-2xl font-bold" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
+                    {formatVolumeUSD(currentVolume)}
+                    <span className="text-gray-500 text-lg font-normal ml-1">
+                      /{formatUSDC(deal.targetVolume)}
+                    </span>
+                  </p>
+                )}
                 <div className="flex-1 h-1 bg-[#2a2a2a] rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-white rounded-full"
+                    className="h-full bg-white rounded-full transition-all"
                     style={{ width: `${progressPercentage}%` }}
                   />
                 </div>

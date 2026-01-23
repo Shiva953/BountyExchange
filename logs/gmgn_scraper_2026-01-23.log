@@ -1,0 +1,20 @@
+2026-01-23T15:21:14.551Z - INFO - Starting KOLScan scrape
+2026-01-23T15:21:14.551Z - INFO - Setting up Chromium browser with Playwright
+2026-01-23T15:24:04.365Z - INFO - Starting KOLScan scrape
+2026-01-23T15:24:04.366Z - INFO - Setting up Chromium browser with Playwright
+2026-01-23T15:24:05.765Z - INFO - Playwright browser initialized
+2026-01-23T15:24:14.409Z - INFO - Extracting data for Daily
+2026-01-23T15:24:14.472Z - INFO - Extracted 50 users for Daily
+2026-01-23T15:24:14.473Z - INFO - Attempting to click Weekly filter button
+2026-01-23T15:24:19.478Z - INFO - Trying selector: text=Weekly
+2026-01-23T15:24:20.604Z - INFO - Clicked Weekly button (regular click)
+2026-01-23T15:24:23.607Z - INFO - Extracting data for Weekly
+2026-01-23T15:24:23.646Z - INFO - Extracted 50 users for Weekly
+2026-01-23T15:24:23.647Z - INFO - Attempting to click Monthly filter button
+2026-01-23T15:24:28.650Z - INFO - Trying selector: text=Monthly
+2026-01-23T15:24:29.731Z - INFO - Clicked Monthly button (regular click)
+2026-01-23T15:24:32.733Z - INFO - Extracting data for Monthly
+2026-01-23T15:24:32.773Z - INFO - Extracted 50 users for Monthly
+2026-01-23T15:24:32.799Z - INFO - Browser cleaned up
+2026-01-23T15:24:32.800Z - INFO - Scrape finished, got 3 periods
+2026-01-23T15:25:51.747Z - INFO - Browser cleaned up

@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model trader {
+  id              Int      @id @default(autoincrement())
+  name            String?
+  address         String   @unique
+  imageUrl        String?
+  volumeCompleted Decimal? @db.Decimal
+  activeBounties  Int?
+  createdAt       DateTime @default(now())
+}

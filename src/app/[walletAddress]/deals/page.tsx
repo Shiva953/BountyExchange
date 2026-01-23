@@ -2,10 +2,11 @@
 
 import { use, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { useAcceptedDeals } from "@/hooks/useAcceptedDeals";
-import { DealWithMetadata } from "@/hooks/useDealsForTrader";
+import { useDealsForTrader, DealWithMetadata } from "@/hooks/useDealsForTrader";
 import { Clock, TrendingUp, Zap, Search, ArrowUpDown, Loader2 } from "lucide-react";
-import { useVolumeProgress } from "@/hooks/useVolumeProgress";
+import { useBatchVolumeProgress } from "@/hooks/useBatchVolumeProgress";
 import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 
 const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
@@ -52,9 +53,10 @@ interface ProfileCardProps {
   walletAddress: string;
   activeBounties: number;
   volumeCompleted: number;
+  isOwnProfile: boolean;
 }
 
-function ProfileCard({ walletAddress, activeBounties, volumeCompleted }: ProfileCardProps) {
+function ProfileCard({ walletAddress, activeBounties, volumeCompleted, isOwnProfile }: ProfileCardProps) {
   return (
     <div
       className="w-full rounded-2xl p-6 border border-white/10 mb-8"
@@ -79,28 +81,40 @@ function ProfileCard({ walletAddress, activeBounties, volumeCompleted }: Profile
               </svg>
             </div>
           </div>
-          <div>
-            <a
-              href={`https://solscan.io/account/${walletAddress}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white font-semibold text-2xl mb-1 font-mono tracking-tight hover:underline transition-all cursor-pointer"
-              style={{
-                textShadow: "0 0 0px rgba(255, 255, 255, 0)",
-                transition: "text-shadow 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.textShadow = "0 0 8px rgba(255, 255, 255, 0.4)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.textShadow = "0 0 0px rgba(255, 255, 255, 0)";
-              }}
-            >
-              {truncateAddress(walletAddress)}
-            </a>
-            <span className="inline-block px-3 py-1 bg-[#f5a0ac]/20 text-[#f5a0ac] text-xs font-semibold rounded-full mx-3">
-              Trader
-            </span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center">
+              <a
+                href={`https://solscan.io/account/${walletAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white font-semibold text-xl font-mono tracking-tight hover:underline transition-all cursor-pointer"
+                style={{
+                  textShadow: "0 0 0px rgba(255, 255, 255, 0)",
+                  transition: "text-shadow 0.2s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.textShadow = "0 0 8px rgba(255, 255, 255, 0.4)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.textShadow = "0 0 0px rgba(255, 255, 255, 0)";
+                }}
+              >
+                {truncateAddress(walletAddress)}
+              </a>
+              <span className="inline-block px-2.5 py-0.5 bg-[#f5a0ac]/20 text-[#f5a0ac] text-xs font-semibold rounded-full ml-3">
+                Trader
+              </span>
+            </div>
+            {isOwnProfile && (
+              <div className="flex items-center gap-2">
+                <button className="px-3 py-1.5 bg-white hover:bg-zinc-200 rounded-sm text-xs text-black font-medium transition-all cursor-pointer">
+                  Sync Telegram
+                </button>
+                <button className="px-3 py-1.5 bg-white hover:bg-zinc-200 rounded-sm text-xs text-black font-medium transition-all cursor-pointer">
+                  Edit Profile
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -224,27 +238,19 @@ function Tabs({ activeTab, onTabChange, activeCount, completedCount, searchQuery
 
 interface DealCardProps {
   deal: DealWithMetadata;
-  walletAddress: string;
   isCompleted?: boolean;
+  volumeUSD?: number;
+  volumeLoading?: boolean;
+  showProgress?: boolean;
 }
 
-function DealCard({ deal, walletAddress, isCompleted = false }: DealCardProps) {
+function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = false, showProgress = true }: DealCardProps) {
   const [imageError, setImageError] = useState(false);
   const [marketCap, setMarketCap] = useState<number | null>(null);
   const tokenName = deal.tokenMetadata?.name || "Unknown Token";
   const tokenSymbol = deal.tokenMetadata?.symbol || "???";
   const tokenImage = deal.tokenMetadata?.image || "";
 
-  const holdDuration = Number(deal.holdDurationInHours);
-  const holdText = `${holdDuration} hour${holdDuration !== 1 ? "s" : ""}`;
-
-  // Fetch real volume progress using the deal's createdAt as startTime
-  const { volumeUSD, loading: volumeLoading } = useVolumeProgress({
-    walletAddress,
-    tokenMint: deal.token.toBase58(),
-    startTime: deal.createdAt.toNumber(),
-    enabled: !isCompleted, // Only fetch for active deals
-  });
 
   useEffect(() => {
     getMarketCap(deal.token.toBase58()).then(setMarketCap);
@@ -317,35 +323,52 @@ function DealCard({ deal, walletAddress, isCompleted = false }: DealCardProps) {
       </div>
 
       {/* Progress bar */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-zinc-400 text-sm tracking-tight">
+      {showProgress && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 text-zinc-400 text-sm tracking-tight">
+              {volumeLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <div className="h-4 w-16 bg-zinc-800 rounded animate-pulse" />
+                </>
+              ) : (
+                <>
+                  <Clock className="w-4 h-4" />
+                  <span>{isCompleted ? "Completed" : "In Progress"}</span>
+                </>
+              )}
+            </div>
             {volumeLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <div className="h-4 w-20 bg-zinc-800 rounded animate-pulse" />
             ) : (
-              <Clock className="w-4 h-4" />
+              <span className="text-zinc-400 text-sm" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
+                {formatVolumeUSD(progressAmount)} done
+              </span>
             )}
-            <span>{isCompleted ? "Completed" : volumeLoading ? "Loading..." : "In Progress"}</span>
           </div>
-          <span className="text-zinc-400 text-sm" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
-            {formatVolumeUSD(progressAmount)} done
-          </span>
+          <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                isCompleted ? "bg-green-500" : "bg-[#f5a0ac]"
+              }`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
-        <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${
-              isCompleted ? "bg-green-500" : "bg-[#f5a0ac]"
-            }`}
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
+      )}
 
       {/* Footer */}
-      <div className="flex items-center gap-2 text-zinc-500 text-sm tracking-tight">
-        <Clock className="w-4 h-4" />
-        <span style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>Hold 80% for {holdText}</span>
-      </div>
+      {!showProgress && (
+        <div className="flex items-center justify-center">
+          <span
+            className="bg-white text-black hover:bg-gray-200 font-semibold px-6 py-2 rounded-lg text-sm cursor-pointer transition-all"
+            style={{ boxShadow: "0 0 12px rgba(255, 255, 255, 0.3)" }}
+          >
+            View
+          </span>
+        </div>
+      )}
     </Link>
   );
 }
@@ -381,10 +404,14 @@ function LoadingCard() {
 
 export default function MyDealsPage({ params }: MyDealsPageProps) {
   const { walletAddress } = use(params);
+  const { publicKey } = useWallet();
   const { deals, loading, error } = useAcceptedDeals(walletAddress);
+  const { deals: availableDeals, loading: availableLoading } = useDealsForTrader();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
   const [searchQuery, setSearchQuery] = useState("");
   const [rewardFilter, setRewardFilter] = useState<RewardFilter>("all");
+
+  const isOwnProfile = publicKey?.toBase58() === walletAddress;
 
   // Filter deals based on active/completed status, search, and reward filter
   const { activeDeals, completedDeals } = useMemo(() => {
@@ -427,6 +454,19 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
 
   const displayedDeals = activeTab === "active" ? activeDeals : completedDeals;
 
+  // Create volume requests for all active deals (batch fetch in parallel)
+  const volumeRequests = useMemo(() => {
+    return activeDeals.map((deal) => ({
+      walletAddress,
+      tokenMint: deal.token.toBase58(),
+      startTime: deal.createdAt.toNumber(),
+      key: deal.publicKey.toBase58(),
+    }));
+  }, [activeDeals, walletAddress]);
+
+  // Batch fetch volumes for all active deals in parallel
+  const { volumes, loadingKeys } = useBatchVolumeProgress(volumeRequests, activeDeals.length > 0);
+
   return (
     <main className="min-h-screen pt-24 px-6 bg-black">
       <div className="max-w-6xl mt-6 mx-auto">
@@ -435,7 +475,44 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
           walletAddress={walletAddress}
           activeBounties={activeDeals.length}
           volumeCompleted={0} // Placeholder - will be implemented with transaction tracking
+          isOwnProfile={isOwnProfile}
         />
+
+        {/* Available Bounties Section - Only for own profile */}
+        {isOwnProfile && (
+          <div className="mb-10">
+            <h2 className="text-white font-semibold text-xl tracking-tight mb-4">Available Bounties</h2>
+            {availableLoading && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <LoadingCard />
+                <LoadingCard />
+              </div>
+            )}
+            {!availableLoading && availableDeals.length === 0 && (
+              <div className="bg-zinc-900/50 border border-zinc-800 border-dashed rounded-2xl p-8 text-center">
+                <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-3">
+                  <Zap className="w-6 h-6 text-zinc-600" />
+                </div>
+                <p className="text-zinc-500 text-base tracking-tight">No available bounties</p>
+                <p className="text-zinc-600 text-sm tracking-tight mt-1">
+                  Check back later for new opportunities
+                </p>
+              </div>
+            )}
+            {!availableLoading && availableDeals.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {availableDeals.map((deal) => (
+                  <DealCard
+                    key={deal.publicKey.toBase58()}
+                    deal={deal}
+                    isCompleted={false}
+                    showProgress={false}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tabs */}
         <Tabs
@@ -482,14 +559,20 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
 
         {!loading && !error && displayedDeals.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {displayedDeals.map((deal) => (
-              <DealCard
-                key={deal.publicKey.toBase58()}
-                deal={deal}
-                walletAddress={walletAddress}
-                isCompleted={activeTab === "completed"}
-              />
-            ))}
+            {displayedDeals.map((deal) => {
+              const dealKey = deal.publicKey.toBase58();
+              const volumeData = volumes.get(dealKey);
+              const isVolumeLoading = loadingKeys.has(dealKey);
+              return (
+                <DealCard
+                  key={dealKey}
+                  deal={deal}
+                  isCompleted={activeTab === "completed"}
+                  volumeUSD={volumeData?.volumeUSD ?? 0}
+                  volumeLoading={isVolumeLoading}
+                />
+              );
+            })}
           </div>
         )}
       </div>
