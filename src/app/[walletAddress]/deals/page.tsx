@@ -4,7 +4,8 @@ import { use, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useAcceptedDeals } from "@/hooks/useAcceptedDeals";
 import { DealWithMetadata } from "@/hooks/useDealsForTrader";
-import { Clock, TrendingUp, Zap, Search, ArrowUpDown } from "lucide-react";
+import { Clock, TrendingUp, Zap, Search, ArrowUpDown, Loader2 } from "lucide-react";
+import { useVolumeProgress } from "@/hooks/useVolumeProgress";
 import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 
 const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
@@ -31,6 +32,16 @@ function formatVolume(amount: bigint | number): string {
     return `$${(value / 1_000_000).toFixed(1)}M`;
   }
   return `$${value.toLocaleString()}`;
+}
+
+function formatVolumeUSD(amount: number): string {
+  if (amount >= 1_000_000) {
+    return `$${(amount / 1_000_000).toFixed(1)}M`;
+  }
+  if (amount >= 1000) {
+    return `$${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+  return `$${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 function truncateAddress(address: string): string {
@@ -213,10 +224,11 @@ function Tabs({ activeTab, onTabChange, activeCount, completedCount, searchQuery
 
 interface DealCardProps {
   deal: DealWithMetadata;
+  walletAddress: string;
   isCompleted?: boolean;
 }
 
-function DealCard({ deal, isCompleted = false }: DealCardProps) {
+function DealCard({ deal, walletAddress, isCompleted = false }: DealCardProps) {
   const [imageError, setImageError] = useState(false);
   const [marketCap, setMarketCap] = useState<number | null>(null);
   const tokenName = deal.tokenMetadata?.name || "Unknown Token";
@@ -226,15 +238,24 @@ function DealCard({ deal, isCompleted = false }: DealCardProps) {
   const holdDuration = Number(deal.holdDurationInHours);
   const holdText = `${holdDuration} hour${holdDuration !== 1 ? "s" : ""}`;
 
+  // Fetch real volume progress using the deal's createdAt as startTime
+  const { volumeUSD, loading: volumeLoading } = useVolumeProgress({
+    walletAddress,
+    tokenMint: deal.token.toBase58(),
+    startTime: deal.createdAt.toNumber(),
+    enabled: !isCompleted, // Only fetch for active deals
+  });
+
   useEffect(() => {
     getMarketCap(deal.token.toBase58()).then(setMarketCap);
   }, [deal.token]);
 
   const showFallback = !tokenImage || imageError;
 
-  // Mock progress - in a real scenario this would come from tracking
-  const progress = isCompleted ? 100 : Math.floor(Math.random() * 80) + 10;
-  const progressAmount = (Number(deal.targetVolume) / 10 ** USDC_DECIMALS) * (progress / 100);
+  // Calculate progress from real volume data
+  const targetVolumeUSD = Number(deal.targetVolume) / 10 ** USDC_DECIMALS;
+  const progress = isCompleted ? 100 : Math.min(100, (volumeUSD / targetVolumeUSD) * 100);
+  const progressAmount = isCompleted ? targetVolumeUSD : volumeUSD;
 
   return (
     <Link
@@ -299,11 +320,15 @@ function DealCard({ deal, isCompleted = false }: DealCardProps) {
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 text-zinc-400 text-sm tracking-tight">
-            <Clock className="w-4 h-4" />
-            <span>{isCompleted ? "Completed" : "In Progress"}</span>
+            {volumeLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Clock className="w-4 h-4" />
+            )}
+            <span>{isCompleted ? "Completed" : volumeLoading ? "Loading..." : "In Progress"}</span>
           </div>
           <span className="text-zinc-400 text-sm" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
-            {formatVolume(progressAmount)} done
+            {formatVolumeUSD(progressAmount)} done
           </span>
         </div>
         <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
@@ -461,6 +486,7 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
               <DealCard
                 key={deal.publicKey.toBase58()}
                 deal={deal}
+                walletAddress={walletAddress}
                 isCompleted={activeTab === "completed"}
               />
             ))}

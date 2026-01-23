@@ -36,6 +36,7 @@ interface DealCardProps {
 function DealCard({ deal, onClick }: DealCardProps) {
   const [imageError, setImageError] = useState(false);
   const [marketCap, setMarketCap] = useState<number | null>(null);
+  const [isHovered, setIsHovered] = useState(false);
   const tokenName = deal.tokenMetadata?.name || "Unknown Token";
   const tokenSymbol = deal.tokenMetadata?.symbol || "???";
   const tokenImage = deal.tokenMetadata?.image || "";
@@ -51,9 +52,24 @@ function DealCard({ deal, onClick }: DealCardProps) {
   return (
     <div
       onClick={() => onClick(deal)}
-      className="flex-shrink-0 w-[340px] bg-black rounded-2xl p-5 border border-white/20 hover:border-white/30 transition-colors cursor-pointer"
-      style={{ background: 'radial-gradient(ellipse 150% 150% at top center, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 40%, black 80%)' }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="flex-shrink-0 w-[340px] rounded-2xl p-5 border border-white/20 hover:border-white/30 cursor-pointer relative overflow-hidden"
+      style={{ 
+        background: 'radial-gradient(ellipse 150% 150% at top center, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 40%, black 80%)',
+        transition: 'border-color 300ms ease-in-out'
+      }}
     >
+      {/* Hover overlay for smooth transition */}
+      <div
+        className="absolute inset-0 rounded-2xl pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse 150% 150% at top center, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.06) 40%, rgba(30,30,30,1) 80%)',
+          opacity: isHovered ? 1 : 0,
+          transition: 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+      />
+      <div className="relative z-10">
       {/* Header: Token info and Reward */}
       <div className="flex items-start justify-between mb-5">
         <div className="flex items-center gap-3">
@@ -104,10 +120,12 @@ function DealCard({ deal, onClick }: DealCardProps) {
       {/* Footer: View button */}
       <div className="flex items-center justify-center">
         <Button
-          className="bg-white text-black hover:bg-gray-200 font-semibold px-6 py-2 rounded-lg text-sm cursor-pointer"
+          className="bg-white text-black hover:bg-gray-200 font-semibold px-6 py-2 rounded-lg text-sm cursor-pointer transition-all"
+          style={{ boxShadow: "0 0 12px rgba(255, 255, 255, 0.3)" }}
         >
           View
         </Button>
+      </div>
       </div>
     </div>
   );
