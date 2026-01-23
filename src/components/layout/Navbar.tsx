@@ -34,7 +34,7 @@ export const Navbar = () => {
             }`}
           >
             <Home className="w-4 h-4" />
-            Home
+            Market
           </Link>
           {publicKey && (
             <Link
@@ -46,7 +46,7 @@ export const Navbar = () => {
               }`}
             >
               <ShoppingBag className="w-4 h-4" />
-              My Deals
+              Trader
             </Link>
           )}
         </div>

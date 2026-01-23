@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useDealsForTrader, DealWithMetadata } from "@/hooks/useDealsForTrader";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Target } from "lucide-react";
+import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 
 // Using 9 decimals for stored amounts
 const USDC_DECIMALS = 9;
@@ -34,11 +35,16 @@ interface DealCardProps {
 
 function DealCard({ deal, onClick }: DealCardProps) {
   const [imageError, setImageError] = useState(false);
+  const [marketCap, setMarketCap] = useState<number | null>(null);
   const tokenName = deal.tokenMetadata?.name || "Unknown Token";
   const tokenSymbol = deal.tokenMetadata?.symbol || "???";
   const tokenImage = deal.tokenMetadata?.image || "";
 
   console.log("[DealCard] Token metadata:", { tokenName, tokenSymbol, tokenImage, fullMetadata: deal.tokenMetadata });
+
+  useEffect(() => {
+    getMarketCap(deal.token.toBase58()).then(setMarketCap);
+  }, [deal.token]);
 
   const showFallback = !tokenImage || imageError;
 
@@ -70,7 +76,11 @@ function DealCard({ deal, onClick }: DealCardProps) {
           </div>
           <div>
             <h3 className="text-white font-semibold text-lg">{tokenName}</h3>
-            <p className="text-gray-500 text-sm tracking-tight">{tokenSymbol}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-gray-500 text-sm tracking-tight">{tokenSymbol}</p>
+              <span className="text-[#f5c4cb] text-[11px] font-extrabold">{formatMarketCap(marketCap)}</span>
+              <span className="text-white/70 text-[11px] font-extrabold ml-[-4px]">MC</span>
+            </div>
           </div>
         </div>
         <div className="text-right">

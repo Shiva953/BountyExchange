@@ -1,10 +1,11 @@
 "use client";
 
-import { use, useState, useMemo } from "react";
+import { use, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useAcceptedDeals } from "@/hooks/useAcceptedDeals";
 import { DealWithMetadata } from "@/hooks/useDealsForTrader";
-import { Clock, TrendingUp, Zap } from "lucide-react";
+import { Clock, TrendingUp, Zap, Search, ArrowUpDown } from "lucide-react";
+import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 
 const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
 
@@ -118,36 +119,94 @@ function ProfileCard({ walletAddress, activeBounties, volumeCompleted }: Profile
   );
 }
 
+type RewardFilter = "all" | "1k" | "5k" | "10k";
+
 interface TabsProps {
   activeTab: "active" | "completed";
   onTabChange: (tab: "active" | "completed") => void;
   activeCount: number;
   completedCount: number;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  rewardFilter: RewardFilter;
+  onRewardFilterChange: (filter: RewardFilter) => void;
 }
 
-function Tabs({ activeTab, onTabChange, activeCount, completedCount }: TabsProps) {
+function Tabs({ activeTab, onTabChange, activeCount, completedCount, searchQuery, onSearchChange, rewardFilter, onRewardFilterChange }: TabsProps) {
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+
+  const filterLabels: Record<RewardFilter, string> = {
+    all: "All",
+    "1k": ">$1K",
+    "5k": ">$5K",
+    "10k": ">$10K",
+  };
+
   return (
-    <div className="flex gap-2 mb-6">
-      <button
-        onClick={() => onTabChange("active")}
-        className={`px-6 py-2.5 rounded-full font-semibold text-sm tracking-tight transition-all cursor-pointer ${
-          activeTab === "active"
-            ? "bg-white text-black"
-            : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
-        }`}
-      >
-        Active ({activeCount})
-      </button>
-      <button
-        onClick={() => onTabChange("completed")}
-        className={`px-6 py-2.5 rounded-full font-semibold text-sm tracking-tight transition-all cursor-pointer ${
-          activeTab === "completed"
-            ? "bg-white text-black"
-            : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
-        }`}
-      >
-        Completed ({completedCount})
-      </button>
+    <div className="flex items-center justify-between gap-4 mb-6">
+      <div className="flex gap-2">
+        <button
+          onClick={() => onTabChange("active")}
+          className={`px-6 py-2.5 rounded-full font-semibold text-sm tracking-tight transition-all cursor-pointer ${
+            activeTab === "active"
+              ? "bg-white text-black"
+              : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+          }`}
+        >
+          Active ({activeCount})
+        </button>
+        <button
+          onClick={() => onTabChange("completed")}
+          className={`px-6 py-2.5 rounded-full font-semibold text-sm tracking-tight transition-all cursor-pointer ${
+            activeTab === "completed"
+              ? "bg-white text-black"
+              : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+          }`}
+        >
+          Completed ({completedCount})
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <input
+            type="text"
+            placeholder="Search by asset..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="pl-9 pr-4 py-2 bg-white/5 border border-zinc-800 rounded-full text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-600 w-48 tracking-tight"
+          />
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-zinc-800 rounded-full text-sm text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
+          >
+            <ArrowUpDown className="w-4 h-4" />
+            Reward: {filterLabels[rewardFilter]}
+          </button>
+          {showFilterDropdown && (
+            <div className="absolute right-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-10 min-w-[120px]">
+              {(["all", "1k", "5k", "10k"] as RewardFilter[]).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => {
+                    onRewardFilterChange(filter);
+                    setShowFilterDropdown(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-sm text-left tracking-tight transition-colors cursor-pointer ${
+                    rewardFilter === filter
+                      ? "bg-white/10 text-white"
+                      : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  {filterLabels[filter]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -159,12 +218,17 @@ interface DealCardProps {
 
 function DealCard({ deal, isCompleted = false }: DealCardProps) {
   const [imageError, setImageError] = useState(false);
+  const [marketCap, setMarketCap] = useState<number | null>(null);
   const tokenName = deal.tokenMetadata?.name || "Unknown Token";
   const tokenSymbol = deal.tokenMetadata?.symbol || "???";
   const tokenImage = deal.tokenMetadata?.image || "";
 
   const holdDuration = Number(deal.holdDurationInHours);
   const holdText = `${holdDuration} hour${holdDuration !== 1 ? "s" : ""}`;
+
+  useEffect(() => {
+    getMarketCap(deal.token.toBase58()).then(setMarketCap);
+  }, [deal.token]);
 
   const showFallback = !tokenImage || imageError;
 
@@ -200,7 +264,11 @@ function DealCard({ deal, isCompleted = false }: DealCardProps) {
           </div>
           <div>
             <h3 className="text-white font-semibold text-lg tracking-tight">{tokenName}</h3>
-            <p className="text-zinc-500 text-sm tracking-tight">{tokenSymbol}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-zinc-500 text-sm tracking-tight">{tokenSymbol}</p>
+              <span className="text-[#f5c4cb] text-[11px] font-extrabold">{formatMarketCap(marketCap)}</span>
+              <span className="text-white/70 text-[11px] font-extrabold ml-[-4px]">MC</span>
+            </div>
           </div>
         </div>
         <div className="text-right">
@@ -290,24 +358,53 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
   const { walletAddress } = use(params);
   const { deals, loading, error } = useAcceptedDeals(walletAddress);
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [rewardFilter, setRewardFilter] = useState<RewardFilter>("all");
 
-  // Filter deals based on active/completed status
+  // Filter deals based on active/completed status, search, and reward filter
   const { activeDeals, completedDeals } = useMemo(() => {
-    const active = deals.filter((deal) => deal.isActive && deal.isAccepted);
-    const completed = deals.filter((deal) => !deal.isActive && deal.isAccepted);
+    const filterAndSort = (dealsList: DealWithMetadata[]) => {
+      let filtered = dealsList;
+
+      // Apply search filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        filtered = filtered.filter((deal) => {
+          const tokenName = deal.tokenMetadata?.name?.toLowerCase() || "";
+          const tokenSymbol = deal.tokenMetadata?.symbol?.toLowerCase() || "";
+          const tokenAddress = deal.token.toBase58().toLowerCase();
+          return tokenName.includes(query) || tokenSymbol.includes(query) || tokenAddress.includes(query);
+        });
+      }
+
+      // Apply reward filter
+      const rewardThresholds: Record<RewardFilter, number> = {
+        all: 0,
+        "1k": 1000 * 10 ** USDC_DECIMALS,
+        "5k": 5000 * 10 ** USDC_DECIMALS,
+        "10k": 10000 * 10 ** USDC_DECIMALS,
+      };
+      const threshold = rewardThresholds[rewardFilter];
+      if (threshold > 0) {
+        filtered = filtered.filter((deal) => deal.rewardAmount.toNumber() > threshold);
+      }
+
+      // Sort by reward descending
+      filtered = [...filtered].sort((a, b) => b.rewardAmount.toNumber() - a.rewardAmount.toNumber());
+
+      return filtered;
+    };
+
+    const active = filterAndSort(deals.filter((deal) => deal.isActive && deal.isAccepted));
+    const completed = filterAndSort(deals.filter((deal) => !deal.isActive && deal.isAccepted));
     return { activeDeals: active, completedDeals: completed };
-  }, [deals]);
+  }, [deals, searchQuery, rewardFilter]);
 
   const displayedDeals = activeTab === "active" ? activeDeals : completedDeals;
 
   return (
     <main className="min-h-screen pt-24 px-6 bg-black">
       <div className="max-w-6xl mt-6 mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white tracking-tight">My Deals</h1>
-        </div>
-
         {/* Profile Card */}
         <ProfileCard
           walletAddress={walletAddress}
@@ -321,6 +418,10 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
           onTabChange={setActiveTab}
           activeCount={activeDeals.length}
           completedCount={completedDeals.length}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          rewardFilter={rewardFilter}
+          onRewardFilterChange={setRewardFilter}
         />
 
         {/* Content */}

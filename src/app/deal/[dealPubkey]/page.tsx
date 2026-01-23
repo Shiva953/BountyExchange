@@ -9,6 +9,7 @@ import { ArrowLeft, Clock, Target, Calendar, TrendingUp, Check, Loader2, ArrowUp
 import Link from "next/link";
 import { toast } from "sonner";
 import { fetchTokenMetadata, TokenMetadata } from "@/utils/tokenMetadata";
+import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 
 const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
 
@@ -117,6 +118,7 @@ export default function DealPage() {
   const [error, setError] = useState<string | null>(null);
   const [buttonState, setButtonState] = useState<ButtonState>("idle");
   const [imageError, setImageError] = useState(false);
+  const [marketCap, setMarketCap] = useState<number | null>(null);
 
   const dealPubkey = params.dealPubkey as string;
 
@@ -133,6 +135,9 @@ export default function DealPage() {
         const dealAccount = await program.account.deal.fetch(dealPublicKey);
 
         const tokenMetadata = await fetchTokenMetadata(dealAccount.token.toBase58());
+
+        // Fetch market cap
+        getMarketCap(dealAccount.token.toBase58()).then(setMarketCap);
 
         setDeal({
           publicKey: dealPublicKey,
@@ -307,6 +312,11 @@ export default function DealPage() {
             )}
             <div>
               <h1 className="text-white text-3xl font-bold tracking-tight">{tokenName}</h1>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-gray-500 text-sm tracking-tight">{tokenSymbol}</span>
+                <span className="text-[#f5c4cb] text-[11px] font-extrabold">{formatMarketCap(marketCap)}</span>
+                <span className="text-white/70 text-[11px] font-extrabold ml-[-4px]">MC</span>
+              </div>
               <p className="text-gray-500 text-sm tracking-tight flex items-center gap-2">
                 <a
                   href={`https://orb.helius.dev/account/${deal.token.toBase58()}`}
