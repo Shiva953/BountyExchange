@@ -4,8 +4,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { Home, ShoppingBag } from "lucide-react";
-import { FaBullseye } from "react-icons/fa";
+import { Grid3x3, Home, ShoppingBag, Zap } from "lucide-react";
+import {} from "react-icons/fa"
 
 const WalletMultiButton = dynamic(
   () =>
@@ -29,7 +29,7 @@ export const Navbar = () => {
         {/* Logo at top */}
         <Link href="/" className="mb-8">
           <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#ff6b8a] to-[#ff8fa3] flex items-center justify-center hover:from-[#ff8fa3] hover:to-[#ff6b8a] transition-all duration-200">
-            <FaBullseye className="text-white text-2xl" />
+            <Zap className="text-white text-2xl fill-white" />
           </div>
         </Link>
 
@@ -44,7 +44,7 @@ export const Navbar = () => {
             }`}
             title="Market"
           >
-            <Home className="w-5 h-5" />
+            <Grid3x3 className="w-5 h-5" />
             <span className="text-[10px] mt-1 font-medium">Market</span>
           </Link>
           
