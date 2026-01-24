@@ -612,9 +612,11 @@ export async function getSwapTransactionsForAddress(
   try {
     while (true) {
       pageCount++;
+      // Don't use type=SWAP filter - fetch ALL transactions and filter ourselves
+      // Helius's SWAP classification can miss some DEX transactions
       const url = new URL(`${HELIUS_API_BASE}/addresses/${walletAddress}/transactions`);
       url.searchParams.set("api-key", apiKey);
-      url.searchParams.set("type", "SWAP");
+      // Removed: url.searchParams.set("type", "SWAP");
       if (beforeSignature) {
         url.searchParams.set("before", beforeSignature);
       }
@@ -640,25 +642,62 @@ export async function getSwapTransactionsForAddress(
       let reachedStartTime = false;
       for (const tx of transactions) {
         const txTimestamp = tx.timestamp;
+        const txDate = new Date(txTimestamp * 1000).toISOString();
 
+        debug("getSwapTransactionsForAddress", `Checking tx ${tx.signature.slice(0, 8)}... timestamp: ${txDate} (${txTimestamp})`);
+
+        // Skip transactions after endTime (they're too new)
         if (endTime && txTimestamp > endTime) {
+          debug("getSwapTransactionsForAddress", `  -> Skipping: after endTime`);
           continue;
         }
 
+        // If transaction is before startTime, we've gone too far back
+        // But DON'T break yet - check remaining transactions in this batch first
+        // (Helius returns in descending order, so subsequent ones will also be too old)
         if (startTime && txTimestamp < startTime) {
+          debug("getSwapTransactionsForAddress", `  -> Before startTime, marking to stop pagination`);
           reachedStartTime = true;
           break;
         }
 
+        // Transaction is within time range - check if it's a swap and matches token
+        // First, check if this is a swap transaction based on type or source
+        const isSwapType = SWAP_TYPES.some(type =>
+          tx.type?.toUpperCase().includes(type)
+        );
+        const isFromDex = DEX_SOURCES.some(source =>
+          tx.source?.toUpperCase().includes(source)
+        );
+        const isSwap = isSwapType || isFromDex;
+
+        debug("getSwapTransactionsForAddress", `  -> In time range. Type: ${tx.type}, Source: ${tx.source}, isSwap: ${isSwap}`);
+
+        if (!isSwap) {
+          debug("getSwapTransactionsForAddress", `  -> Not a swap transaction, skipping`);
+          continue;
+        }
+
         if (tokenMint) {
           const tokenMintLower = tokenMint.toLowerCase();
+          const allMints = [
+            ...(tx.tokenTransfers?.map(t => t.mint) || []),
+            ...(tx.accountData?.flatMap(a => a.tokenBalanceChanges?.map(c => c.mint) || []) || [])
+          ];
+
+          debug("getSwapTransactionsForAddress", `  -> Mints in tx: ${JSON.stringify(allMints)}`);
+          debug("getSwapTransactionsForAddress", `  -> Looking for: ${tokenMintLower}`);
+
           const matchesToken =
             tx.tokenTransfers?.some(t => t.mint?.toLowerCase() === tokenMintLower) ||
             tx.accountData?.some(a =>
               a.tokenBalanceChanges?.some(c => c.mint?.toLowerCase() === tokenMintLower)
             );
           if (matchesToken) {
+            debug("getSwapTransactionsForAddress", `  -> TOKEN MATCH! Adding to results`);
             allSwaps.push(tx);
+          } else {
+            debug("getSwapTransactionsForAddress", `  -> No token match, skipping`);
           }
         } else {
           allSwaps.push(tx);
