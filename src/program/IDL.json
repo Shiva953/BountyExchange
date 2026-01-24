@@ -1,548 +1,565 @@
 {
-    "address": "9c3ZGDTinPuGXxJGaN3QsNRBcDgkkjcsNgXgcoqoGW8D",
-    "metadata": {
-      "name": "bounty_exchange_program",
-      "version": "0.1.0",
-      "spec": "0.1.0",
-      "description": "Created with Anchor"
+  "address": "9c3ZGDTinPuGXxJGaN3QsNRBcDgkkjcsNgXgcoqoGW8D",
+  "metadata": {
+    "name": "bounty_exchange_program",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "accept_deal",
+      "discriminator": [
+        76,
+        156,
+        34,
+        30,
+        129,
+        136,
+        76,
+        244
+      ],
+      "accounts": [
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "deal",
+          "writable": true
+        }
+      ],
+      "args": []
     },
-    "instructions": [
-      {
-        "name": "accept_deal",
-        "discriminator": [
-          76,
-          156,
-          34,
-          30,
-          129,
-          136,
-          76,
-          244
-        ],
-        "accounts": [
-          {
-            "name": "trader",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "deal",
-            "writable": true
+    {
+      "name": "create_deal",
+      "discriminator": [
+        198,
+        212,
+        144,
+        151,
+        97,
+        56,
+        149,
+        113
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "deal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              },
+              {
+                "kind": "arg",
+                "path": "args.deal_id"
+              }
+            ]
           }
-        ],
-        "args": []
-      },
-      {
-        "name": "create_deal",
-        "discriminator": [
-          198,
-          212,
-          144,
-          151,
-          97,
-          56,
-          149,
-          113
-        ],
-        "accounts": [
-          {
-            "name": "payer",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "deal",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "const",
-                  "value": [
-                    100,
-                    101,
-                    97,
-                    108
-                  ]
-                },
-                {
-                  "kind": "account",
-                  "path": "payer"
-                },
-                {
-                  "kind": "arg",
-                  "path": "args.deal_id"
-                }
+        },
+        {
+          "name": "escrow_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "deal"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
               ]
             }
+          }
+        },
+        {
+          "name": "payer_token_account",
+          "writable": true
+        },
+        {
+          "name": "fee_wallet",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreateDealArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalize_deal",
+      "discriminator": [
+        20,
+        13,
+        62,
+        64,
+        17,
+        110,
+        130,
+        148
+      ],
+      "accounts": [
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "creator"
+        },
+        {
+          "name": "deal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "account",
+                "path": "deal.deal_id",
+                "account": "Deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "deal"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "trader_token_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "trader"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "FinalizeDealArgs"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Deal",
+      "discriminator": [
+        125,
+        223,
+        160,
+        234,
+        71,
+        162,
+        182,
+        219
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidFeeWallet",
+      "msg": "Invalid fee wallet"
+    },
+    {
+      "code": 6001,
+      "name": "RewardBelowMinimum",
+      "msg": "Minimum reward amount is 200 USDC"
+    },
+    {
+      "code": 6002,
+      "name": "UnauthorizedTrader",
+      "msg": "Only the targeted trader can accept this deal"
+    },
+    {
+      "code": 6003,
+      "name": "DealNotActive",
+      "msg": "Deal is not active"
+    },
+    {
+      "code": 6004,
+      "name": "DealAlreadyAccepted",
+      "msg": "Deal has already been accepted"
+    },
+    {
+      "code": 6005,
+      "name": "SelfTargetedDeal",
+      "msg": "Cannot create a bounty targeting yourself"
+    },
+    {
+      "code": 6006,
+      "name": "DealNotAccepted",
+      "msg": "Deal has not been accepted yet"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidCreator",
+      "msg": "Invalid creator account"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidEscrowVault",
+      "msg": "Invalid escrow vault"
+    },
+    {
+      "code": 6009,
+      "name": "DealExpired",
+      "msg": "Deal has expired"
+    },
+    {
+      "code": 6010,
+      "name": "VolumeRequirementNotMet",
+      "msg": "Volume requirement not met"
+    },
+    {
+      "code": 6011,
+      "name": "HoldDurationRequirementNotMet",
+      "msg": "Hold duration requirement not met"
+    },
+    {
+      "code": 6012,
+      "name": "MinBuyVolumeExceedsTarget",
+      "msg": "Minimum buy volume must be less than target volume"
+    }
+  ],
+  "types": [
+    {
+      "name": "CreateDealArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "deal_id",
+            "type": "u64"
+          },
+          {
+            "name": "token",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_amount",
+            "type": "u64"
+          },
+          {
+            "name": "target_volume",
+            "type": "u64"
+          },
+          {
+            "name": "min_buy_volume",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "expiration_window_in_hours",
+            "type": "u64"
+          },
+          {
+            "name": "hold_duration_in_hours",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Deal",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "deal_id",
+            "type": "u64"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "token",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_amount",
+            "type": "u64"
+          },
+          {
+            "name": "target_volume",
+            "type": "u64"
+          },
+          {
+            "name": "min_buy_volume",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "expiration_window_in_hours",
+            "type": "u64"
+          },
+          {
+            "name": "hold_duration_in_hours",
+            "type": "u64"
           },
           {
             "name": "escrow_vault",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "account",
-                  "path": "deal"
-                },
-                {
-                  "kind": "account",
-                  "path": "token_program"
-                },
-                {
-                  "kind": "account",
-                  "path": "usdc_mint"
-                }
-              ],
-              "program": {
-                "kind": "const",
-                "value": [
-                  140,
-                  151,
-                  37,
-                  143,
-                  78,
-                  36,
-                  137,
-                  241,
-                  187,
-                  61,
-                  16,
-                  41,
-                  20,
-                  142,
-                  13,
-                  131,
-                  11,
-                  90,
-                  19,
-                  153,
-                  218,
-                  255,
-                  16,
-                  132,
-                  4,
-                  142,
-                  123,
-                  216,
-                  219,
-                  233,
-                  248,
-                  89
-                ]
-              }
-            }
+            "type": "pubkey"
           },
           {
-            "name": "payer_token_account",
-            "writable": true
+            "name": "bump",
+            "type": "u8"
           },
           {
-            "name": "fee_wallet",
-            "writable": true
+            "name": "created_at",
+            "type": "i64"
           },
           {
-            "name": "usdc_mint"
+            "name": "is_active",
+            "type": "bool"
           },
           {
-            "name": "token_program"
-          },
-          {
-            "name": "associated_token_program",
-            "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
-          }
-        ],
-        "args": [
-          {
-            "name": "args",
-            "type": {
-              "defined": {
-                "name": "CreateDealArgs"
-              }
-            }
-          }
-        ]
-      },
-      {
-        "name": "finalize_deal",
-        "discriminator": [
-          20,
-          13,
-          62,
-          64,
-          17,
-          110,
-          130,
-          148
-        ],
-        "accounts": [
-          {
-            "name": "trader",
-            "writable": true,
-            "signer": true
-          },
-          {
-            "name": "creator"
-          },
-          {
-            "name": "deal",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "const",
-                  "value": [
-                    100,
-                    101,
-                    97,
-                    108
-                  ]
-                },
-                {
-                  "kind": "account",
-                  "path": "creator"
-                },
-                {
-                  "kind": "account",
-                  "path": "deal.deal_id",
-                  "account": "Deal"
-                }
-              ]
-            }
-          },
-          {
-            "name": "escrow_vault",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "account",
-                  "path": "deal"
-                },
-                {
-                  "kind": "account",
-                  "path": "token_program"
-                },
-                {
-                  "kind": "account",
-                  "path": "usdc_mint"
-                }
-              ],
-              "program": {
-                "kind": "const",
-                "value": [
-                  140,
-                  151,
-                  37,
-                  143,
-                  78,
-                  36,
-                  137,
-                  241,
-                  187,
-                  61,
-                  16,
-                  41,
-                  20,
-                  142,
-                  13,
-                  131,
-                  11,
-                  90,
-                  19,
-                  153,
-                  218,
-                  255,
-                  16,
-                  132,
-                  4,
-                  142,
-                  123,
-                  216,
-                  219,
-                  233,
-                  248,
-                  89
-                ]
-              }
-            }
-          },
-          {
-            "name": "trader_token_account",
-            "writable": true,
-            "pda": {
-              "seeds": [
-                {
-                  "kind": "account",
-                  "path": "trader"
-                },
-                {
-                  "kind": "account",
-                  "path": "token_program"
-                },
-                {
-                  "kind": "account",
-                  "path": "usdc_mint"
-                }
-              ],
-              "program": {
-                "kind": "const",
-                "value": [
-                  140,
-                  151,
-                  37,
-                  143,
-                  78,
-                  36,
-                  137,
-                  241,
-                  187,
-                  61,
-                  16,
-                  41,
-                  20,
-                  142,
-                  13,
-                  131,
-                  11,
-                  90,
-                  19,
-                  153,
-                  218,
-                  255,
-                  16,
-                  132,
-                  4,
-                  142,
-                  123,
-                  216,
-                  219,
-                  233,
-                  248,
-                  89
-                ]
-              }
-            }
-          },
-          {
-            "name": "usdc_mint"
-          },
-          {
-            "name": "token_program"
-          },
-          {
-            "name": "associated_token_program",
-            "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-          },
-          {
-            "name": "system_program",
-            "address": "11111111111111111111111111111111"
-          }
-        ],
-        "args": [
-          {
-            "name": "args",
-            "type": {
-              "defined": {
-                "name": "FinalizeDealArgs"
-              }
-            }
+            "name": "is_accepted",
+            "type": "bool"
           }
         ]
       }
-    ],
-    "accounts": [
-      {
-        "name": "Deal",
-        "discriminator": [
-          125,
-          223,
-          160,
-          234,
-          71,
-          162,
-          182,
-          219
+    },
+    {
+      "name": "FinalizeDealArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "volume_at_end_time",
+            "type": "u64"
+          },
+          {
+            "name": "hold_duration_at_end_time",
+            "type": "u64"
+          }
         ]
       }
-    ],
-    "errors": [
-      {
-        "code": 6000,
-        "name": "InvalidFeeWallet",
-        "msg": "Invalid fee wallet"
-      },
-      {
-        "code": 6001,
-        "name": "RewardBelowMinimum",
-        "msg": "Minimum reward amount is 200 USDC"
-      },
-      {
-        "code": 6002,
-        "name": "UnauthorizedTrader",
-        "msg": "Only the targeted trader can accept this deal"
-      },
-      {
-        "code": 6003,
-        "name": "DealNotActive",
-        "msg": "Deal is not active"
-      },
-      {
-        "code": 6004,
-        "name": "DealAlreadyAccepted",
-        "msg": "Deal has already been accepted"
-      },
-      {
-        "code": 6005,
-        "name": "SelfTargetedDeal",
-        "msg": "Cannot create a bounty targeting yourself"
-      },
-      {
-        "code": 6006,
-        "name": "DealNotAccepted",
-        "msg": "Deal has not been accepted yet"
-      },
-      {
-        "code": 6007,
-        "name": "InvalidCreator",
-        "msg": "Invalid creator account"
-      },
-      {
-        "code": 6008,
-        "name": "InvalidEscrowVault",
-        "msg": "Invalid escrow vault"
-      },
-      {
-        "code": 6009,
-        "name": "DealExpired",
-        "msg": "Deal has expired"
-      },
-      {
-        "code": 6010,
-        "name": "VolumeRequirementNotMet",
-        "msg": "Volume requirement not met"
-      },
-      {
-        "code": 6011,
-        "name": "HoldDurationRequirementNotMet",
-        "msg": "Hold duration requirement not met"
-      }
-    ],
-    "types": [
-      {
-        "name": "CreateDealArgs",
-        "type": {
-          "kind": "struct",
-          "fields": [
-            {
-              "name": "deal_id",
-              "type": "u64"
-            },
-            {
-              "name": "token",
-              "type": "pubkey"
-            },
-            {
-              "name": "trader",
-              "type": "pubkey"
-            },
-            {
-              "name": "reward_amount",
-              "type": "u64"
-            },
-            {
-              "name": "target_volume",
-              "type": "u64"
-            },
-            {
-              "name": "expiration_window_in_hours",
-              "type": "u64"
-            },
-            {
-              "name": "hold_duration_in_hours",
-              "type": "u64"
-            }
-          ]
-        }
-      },
-      {
-        "name": "Deal",
-        "type": {
-          "kind": "struct",
-          "fields": [
-            {
-              "name": "deal_id",
-              "type": "u64"
-            },
-            {
-              "name": "creator",
-              "type": "pubkey"
-            },
-            {
-              "name": "token",
-              "type": "pubkey"
-            },
-            {
-              "name": "trader",
-              "type": "pubkey"
-            },
-            {
-              "name": "reward_amount",
-              "type": "u64"
-            },
-            {
-              "name": "target_volume",
-              "type": "u64"
-            },
-            {
-              "name": "expiration_window_in_hours",
-              "type": "u64"
-            },
-            {
-              "name": "hold_duration_in_hours",
-              "type": "u64"
-            },
-            {
-              "name": "escrow_vault",
-              "type": "pubkey"
-            },
-            {
-              "name": "bump",
-              "type": "u8"
-            },
-            {
-              "name": "created_at",
-              "type": "i64"
-            },
-            {
-              "name": "is_active",
-              "type": "bool"
-            },
-            {
-              "name": "is_accepted",
-              "type": "bool"
-            }
-          ]
-        }
-      },
-      {
-        "name": "FinalizeDealArgs",
-        "type": {
-          "kind": "struct",
-          "fields": [
-            {
-              "name": "volume_at_end_time",
-              "type": "u64"
-            },
-            {
-              "name": "hold_duration_at_end_time",
-              "type": "u64"
-            }
-          ]
-        }
-      }
-    ]
-  }
+    }
+  ]
+}

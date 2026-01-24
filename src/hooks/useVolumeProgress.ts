@@ -15,6 +15,7 @@ interface UseVolumeProgressParams {
   walletAddress: string;
   tokenMint: string;
   startTime?: number; // Unix timestamp (seconds)
+  minBuyVolume?: number; // Minimum buy volume in USD - only count swaps >= this value
   enabled?: boolean;
 }
 
@@ -22,6 +23,7 @@ export function useVolumeProgress({
   walletAddress,
   tokenMint,
   startTime,
+  minBuyVolume,
   enabled = true,
 }: UseVolumeProgressParams): VolumeProgressData & { refetch: () => void } {
   const [volumeUSD, setVolumeUSD] = useState(0);
@@ -51,6 +53,7 @@ export function useVolumeProgress({
           fast: true,
           startTime: startTime,
           endTime: Math.floor(Date.now() / 1000),
+          minBuyVolume: minBuyVolume,
         }),
       });
 
@@ -74,7 +77,7 @@ export function useVolumeProgress({
     } finally {
       setLoading(false);
     }
-  }, [walletAddress, tokenMint, startTime, enabled]);
+  }, [walletAddress, tokenMint, startTime, minBuyVolume, enabled]);
 
   useEffect(() => {
     fetchVolume();

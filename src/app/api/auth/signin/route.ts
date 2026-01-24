@@ -114,10 +114,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       trader: {
-        id: trader.id,
-        address: trader.address,
-        name: trader.name,
-        imageUrl: trader.imageUrl,
+        id: trader?.id,
+        address: trader?.address,
+        name: trader?.name,
+        imageUrl: trader?.imageUrl,
       },
     });
   } catch (error) {

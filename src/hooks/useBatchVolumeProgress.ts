@@ -13,6 +13,7 @@ interface VolumeRequest {
   walletAddress: string;
   tokenMint: string;
   startTime?: number;
+  minBuyVolume?: number; // Minimum buy volume in USD - only count swaps >= this value
   key: string; // unique identifier for this request (e.g., dealPubkey)
 }
 
@@ -83,6 +84,7 @@ export function useBatchVolumeProgress(
               token: req.tokenMint,
               startTime: req.startTime,
               endTime: Math.floor(Date.now() / 1000),
+              minBuyVolume: req.minBuyVolume,
               key: req.key,
             })),
           }),

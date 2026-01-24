@@ -34,6 +34,7 @@ interface BountyFormData {
   traderWallet: string;
   rewardAmount: string;
   volumeTarget: string;
+  minBuyVolume: string;
   expirationWindow: string;
   holdDuration: string;
 }
@@ -52,6 +53,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
     traderWallet: "",
     rewardAmount: "",
     volumeTarget: "",
+    minBuyVolume: "",
     expirationWindow: "",
     holdDuration: "",
   });
@@ -71,13 +73,21 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
     ? (parseFloat(formData.rewardAmount) * 1.1).toFixed(2)
     : "0";
 
+  // Validate minBuyVolume < targetVolume if minBuyVolume is provided
+  const minBuyVolumeError = formData.minBuyVolume && formData.volumeTarget
+    ? parseFloat(formData.minBuyVolume) >= parseFloat(formData.volumeTarget)
+      ? "Min buy size must be less than target volume"
+      : null
+    : null;
+
   const isFormValid =
     formData.contractAddress &&
     formData.traderWallet &&
     formData.rewardAmount &&
     formData.volumeTarget &&
     formData.expirationWindow &&
-    formData.holdDuration;
+    formData.holdDuration &&
+    !minBuyVolumeError;
 
   const handleCreateBounty = useCallback(async () => {
     if (!publicKey || !signTransaction || !isFormValid) {
@@ -99,6 +109,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
           trader: formData.traderWallet,
           rewardAmount: formData.rewardAmount,
           targetVolume: formData.volumeTarget,
+          minBuyVolume: formData.minBuyVolume || undefined,
           expirationWindowInHours: formData.expirationWindow,
           holdDurationInHours: formData.holdDuration,
         }),
@@ -159,6 +170,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
           traderWallet: "",
           rewardAmount: "",
           volumeTarget: "",
+          minBuyVolume: "",
           expirationWindow: "",
           holdDuration: "",
         });
@@ -177,6 +189,10 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       } else if (errorMessage.includes("6005") || errorMessage.includes("SelfTargetedDeal") || errorMessage.includes("targeting yourself")) {
         toast.error("Cannot create a bounty targeting yourself");
         setTxError("Cannot create a bounty targeting yourself");
+      // Check for MinBuyVolumeExceedsTarget error (code 6012)
+      } else if (errorMessage.includes("6012") || errorMessage.includes("MinBuyVolumeExceedsTarget") || errorMessage.includes("Minimum buy volume must be less than")) {
+        toast.error("Min buy size must be less than target volume");
+        setTxError("Min buy size must be less than target volume");
       } else {
         setTxError(errorMessage);
       }
@@ -272,7 +288,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                 <CardTitle className="text-base tracking-tight font-sans">Reward & Conditions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="rewardAmount" className="tracking-tight font-sans">Reward ($)</Label>
                     <Input
@@ -296,6 +312,21 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                       onChange={(e) => handleInputChange("volumeTarget", e.target.value)}
                       className="rounded-none"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="minBuyVolume" className="tracking-tight font-sans">Min Buy Size ($) <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                    <Input
+                      id="minBuyVolume"
+                      type="number"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={formData.minBuyVolume}
+                      onChange={(e) => handleInputChange("minBuyVolume", e.target.value)}
+                      className={`rounded-none ${minBuyVolumeError ? "border-destructive" : ""}`}
+                    />
+                    {minBuyVolumeError && (
+                      <p className="text-xs text-destructive">{minBuyVolumeError}</p>
+                    )}
                   </div>
                 </div>
 

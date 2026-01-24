@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useState,
+  useRef,
   ReactNode,
 } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -26,11 +27,45 @@ interface AuthContextType {
   signIn: () => Promise<boolean>;
   signOut: () => void;
   walletAddress: string | null;
+  isSessionRestored: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const SIGN_MESSAGE = "Sign in to Bounty Exchange";
+const AUTH_STORAGE_KEY = "bounty_exchange_auth";
+
+interface StoredSession {
+  walletAddress: string;
+  trader: Trader;
+  timestamp: number;
+}
+
+function getStoredSession(): StoredSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!stored) return null;
+    return JSON.parse(stored);
+  } catch {
+    return null;
+  }
+}
+
+function storeSession(walletAddress: string, trader: Trader): void {
+  if (typeof window === "undefined") return;
+  const session: StoredSession = {
+    walletAddress,
+    trader,
+    timestamp: Date.now(),
+  };
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+}
+
+function clearStoredSession(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { publicKey, signMessage, connected, disconnect } = useWallet();
@@ -38,13 +73,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [trader, setTrader] = useState<Trader | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSessionRestored, setIsSessionRestored] = useState(false);
+  const previousWalletRef = useRef<string | null>(null);
 
-  // Reset auth state when wallet disconnects
+  // Restore session from localStorage on mount when wallet connects
+  useEffect(() => {
+    if (!connected || !publicKey) {
+      setIsSessionRestored(true);
+      return;
+    }
+
+    const currentWallet = publicKey.toBase58();
+    const storedSession = getStoredSession();
+
+    // If wallet changed, clear old session
+    if (previousWalletRef.current && previousWalletRef.current !== currentWallet) {
+      clearStoredSession();
+      setIsAuthenticated(false);
+      setTrader(null);
+      setError(null);
+    }
+
+    previousWalletRef.current = currentWallet;
+
+    // Restore session if it matches current wallet
+    if (storedSession && storedSession.walletAddress === currentWallet) {
+      setIsAuthenticated(true);
+      setTrader(storedSession.trader);
+      setError(null);
+    }
+
+    setIsSessionRestored(true);
+  }, [connected, publicKey]);
+
+  // Clear auth state when wallet disconnects
   useEffect(() => {
     if (!connected) {
       setIsAuthenticated(false);
       setTrader(null);
       setError(null);
+      previousWalletRef.current = null;
     }
   }, [connected]);
 
@@ -103,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setIsAuthenticated(true);
       setTrader(data.trader);
+      storeSession(publicKey.toBase58(), data.trader);
       setIsLoading(false);
       return true;
     } catch (err) {
@@ -132,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(false);
     setTrader(null);
     setError(null);
+    clearStoredSession();
     disconnect();
   }, [disconnect]);
 
@@ -145,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signOut,
         walletAddress: publicKey?.toBase58() ?? null,
+        isSessionRestored,
       }}
     >
       {children}

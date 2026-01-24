@@ -1,6 +1,6 @@
 "use client";
 
-import { FC, ReactNode, useEffect, useState } from "react";
+import { FC, ReactNode } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useAuth } from "./AuthProvider";
@@ -11,28 +11,7 @@ interface WalletGateProps {
 
 export const WalletGate: FC<WalletGateProps> = ({ children }) => {
   const { connected } = useWallet();
-  const { isAuthenticated, isLoading, error, signIn } = useAuth();
-  const [hasAttemptedSignIn, setHasAttemptedSignIn] = useState(false);
-
-  // Auto-trigger sign in when wallet connects but not authenticated
-  // Only attempt once to prevent multiple pop-ups
-  useEffect(() => {
-    if (connected && !isAuthenticated && !isLoading && !hasAttemptedSignIn) {
-      setHasAttemptedSignIn(true);
-      signIn().catch((err) => {
-        console.error("Auto sign-in failed:", err);
-        // Reset the flag on error so user can manually retry
-        setHasAttemptedSignIn(false);
-      });
-    }
-  }, [connected, isAuthenticated, isLoading, hasAttemptedSignIn, signIn]);
-
-  // Reset attempt flag when wallet disconnects
-  useEffect(() => {
-    if (!connected) {
-      setHasAttemptedSignIn(false);
-    }
-  }, [connected]);
+  const { isAuthenticated, isLoading, error, signIn, isSessionRestored } = useAuth();
 
   // Not connected - show connect wallet
   if (!connected) {
@@ -51,7 +30,16 @@ export const WalletGate: FC<WalletGateProps> = ({ children }) => {
     );
   }
 
-  // Connected but authenticating
+  // Waiting for session restoration from localStorage
+  if (!isSessionRestored) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+      </div>
+    );
+  }
+
+  // Connected but authenticating (signing message)
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
@@ -68,7 +56,7 @@ export const WalletGate: FC<WalletGateProps> = ({ children }) => {
     );
   }
 
-  // Connected but not authenticated (signature rejected or failed)
+  // Connected but not authenticated - show sign in button (user must click)
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
@@ -83,10 +71,7 @@ export const WalletGate: FC<WalletGateProps> = ({ children }) => {
             <p className="text-red-400 text-sm mb-4">{error}</p>
           )}
           <button
-            onClick={() => {
-              setHasAttemptedSignIn(false); // Reset flag to allow retry
-              signIn();
-            }}
+            onClick={() => signIn()}
             className="bg-white text-black px-6 py-3 rounded-lg font-medium hover:bg-gray-200 transition-colors"
           >
             Sign In

@@ -22,6 +22,7 @@ interface DealData {
   trader: PublicKey;
   rewardAmount: number;
   targetVolume: number;
+  minBuyVolume: number | null;
   expirationWindowInHours: number;
   holdDurationInHours: number;
   escrowVault: PublicKey;
@@ -64,7 +65,7 @@ function formatExpiryDate(createdAt: number, expirationWindowInHours: number): s
 
 function DealPageSkeleton() {
   return (
-    <div className="min-h-screen bg-black pt-16">
+    <div className="min-h-screen bg-black pt-16 pl-20">
       <div className="max-w-5xl mx-auto px-6 py-12">
         {/* Header Skeleton */}
         <div className="flex items-center justify-between mb-10">
@@ -158,6 +159,7 @@ export default function DealPage() {
           trader: dealAccount.trader,
           rewardAmount: dealAccount.rewardAmount.toNumber(),
           targetVolume: dealAccount.targetVolume.toNumber(),
+          minBuyVolume: dealAccount.minBuyVolume ? dealAccount.minBuyVolume.toNumber() : null,
           expirationWindowInHours: dealAccount.expirationWindowInHours.toNumber(),
           holdDurationInHours: dealAccount.holdDurationInHours.toNumber(),
           escrowVault: dealAccount.escrowVault,
@@ -179,10 +181,13 @@ export default function DealPage() {
 
   // Fetch real volume progress when deal is accepted
   // Must be called unconditionally (before any early returns) to follow Rules of Hooks
+  // Convert minBuyVolume from USDC decimals to USD for the volume calculation filter
+  const minBuyVolumeUSD = deal?.minBuyVolume ? deal.minBuyVolume / 10 ** USDC_DECIMALS : undefined;
   const { volumeUSD, loading: volumeLoading, refetch: refetchVolume } = useVolumeProgress({
     walletAddress: deal?.trader.toBase58() ?? "",
     tokenMint: deal?.token.toBase58() ?? "",
     startTime: deal?.createdAt,
+    minBuyVolume: minBuyVolumeUSD,
     enabled: Boolean(deal?.isAccepted),
   });
 
@@ -243,7 +248,7 @@ export default function DealPage() {
 
   if (error || !deal) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
+      <div className="flex min-h-screen items-center justify-center bg-black pl-20">
         <div className="text-red-400">{error || "Deal not found"}</div>
       </div>
     );
@@ -371,7 +376,7 @@ export default function DealPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-4 gap-4 mb-10">
+        <div className={`grid gap-4 mb-10 ${deal.minBuyVolume ? "grid-cols-5" : "grid-cols-4"}`}>
           <div className="bg-[#111] rounded-xl p-4 border border-white/10">
             <div className="flex items-center gap-2 text-gray-500 text-xs tracking-tight mb-2">
               <Target className="w-3 h-3" />
@@ -379,6 +384,15 @@ export default function DealPage() {
             </div>
             <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatUSDC(deal.targetVolume)}</p>
           </div>
+          {deal.minBuyVolume && (
+            <div className="bg-[#111] rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-2 text-gray-500 text-xs tracking-tight mb-2">
+                <Target className="w-3 h-3" />
+                Min Buy Size
+              </div>
+              <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatUSDC(deal.minBuyVolume)}</p>
+            </div>
+          )}
           <div className="bg-[#111] rounded-xl p-4 border border-white/10">
             <div className="flex items-center gap-2 text-gray-500 text-xs tracking-tight mb-2">
               <Clock className="w-3 h-3" />

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Home, ShoppingBag } from "lucide-react";
+import { FaBullseye } from "react-icons/fa";
 
 const WalletMultiButton = dynamic(
   () =>
@@ -18,42 +19,56 @@ export const Navbar = () => {
   const pathname = usePathname();
   const { publicKey } = useWallet();
 
+  // Check if current path matches trader route pattern
+  const isTraderPage = publicKey && pathname?.startsWith(`/${publicKey.toBase58()}/deals`);
+
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 bg-white/80 dark:bg-black/80 backdrop-blur-sm border-b border-zinc-200 dark:border-zinc-800">
-      <div className="flex items-center gap-12">
-        <span className="text-lg font-semibold text-zinc-900 dark:text-white">
-          Bounty Exchange
-        </span>
-        <div className="flex items-center gap-3">
+    <>
+      {/* Left Vertical Navigation */}
+      <nav className="fixed left-0 top-0 bottom-0 z-50 w-20 flex flex-col items-center py-6 bg-black border-r border-white/10">
+        {/* Logo at top */}
+        <Link href="/" className="mb-8">
+          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#ff6b8a] to-[#ff8fa3] flex items-center justify-center hover:from-[#ff8fa3] hover:to-[#ff6b8a] transition-all duration-200">
+            <FaBullseye className="text-white text-2xl" />
+          </div>
+        </Link>
+
+        {/* Navigation Links */}
+        <div className="flex flex-col gap-4 flex-1">
           <Link
             href="/"
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+            className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${
               pathname === "/"
-                ? "bg-[#2a1a1a]/80 text-[#ff6b8a]"
-                : "text-zinc-500 dark:text-zinc-400 hover:bg-[#2a1a1a]/80 hover:!text-[#ff6b8a]"
+                ? "bg-white/10 text-[#ff6b8a]"
+                : "text-zinc-500 hover:bg-white/5 hover:text-white"
             }`}
+            title="Market"
           >
-            <Home className="w-4 h-4" />
-            Market
+            <Home className="w-5 h-5" />
+            <span className="text-[10px] mt-1 font-medium">Market</span>
           </Link>
+          
           {publicKey && (
             <Link
               href={`/${publicKey.toBase58()}/deals`}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                pathname === `/${publicKey.toBase58()}/deals`
-                  ? "bg-[#2a1a1a]/80 text-[#ff6b8a]"
-                  : "text-zinc-500 dark:text-zinc-400 hover:bg-[#2a1a1a]/80 hover:!text-[#ff6b8a]"
+              className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${
+                isTraderPage
+                  ? "bg-white/10 text-[#ff6b8a]"
+                  : "text-zinc-500 hover:bg-white/5 hover:text-white"
               }`}
+              title="Trader"
             >
-              <ShoppingBag className="w-4 h-4" />
-              Trader
+              <ShoppingBag className="w-5 h-5" />
+              <span className="text-[10px] mt-1 font-medium">Trader</span>
             </Link>
           )}
         </div>
-      </div>
-      <div className="flex items-center">
+      </nav>
+
+      {/* Top Right Wallet Button */}
+      <div className="fixed top-6 right-6 z-50">
         <WalletMultiButton />
       </div>
-    </nav>
+    </>
   );
 };

@@ -26,6 +26,7 @@ export interface CreateDealArgs {
   trader: PublicKey;
   rewardAmount: BN;
   targetVolume: BN;
+  minBuyVolume: BN | null;
   expirationWindowInHours: BN;
   holdDurationInHours: BN;
 }
@@ -73,6 +74,7 @@ export async function buildCreateDealInstruction(
       trader: args.trader,
       rewardAmount: args.rewardAmount,
       targetVolume: args.targetVolume,
+      minBuyVolume: args.minBuyVolume,
       expirationWindowInHours: args.expirationWindowInHours,
       holdDurationInHours: args.holdDurationInHours,
     })
@@ -113,6 +115,7 @@ export function logDealDetails(
   console.log("Trader:", args.trader.toBase58());
   console.log("Reward Amount:", args.rewardAmount.toString());
   console.log("Target Volume:", args.targetVolume.toString());
+  console.log("Min Buy Volume:", args.minBuyVolume?.toString() ?? "None");
   console.log(
     "Expiration Window (hours):",
     args.expirationWindowInHours.toString()

@@ -119,6 +119,7 @@ export async function POST(request: NextRequest) {
       maxTxns = 500,
       startTime: startTimeParam,
       endTime: endTimeParam,
+      minBuyVolume: minBuyVolumeParam,
     } = body;
 
     if (!walletAddress) {
@@ -139,18 +140,22 @@ export async function POST(request: NextRequest) {
 
     const filterStartTime = startTimeParam ? Number(startTimeParam) : undefined;
     const filterEndTime = endTimeParam ? Number(endTimeParam) : undefined;
+    const minBuyVolumeUSD = minBuyVolumeParam ? Number(minBuyVolumeParam) : undefined;
 
     console.log(`[API] Wallet: ${walletAddress}`);
     console.log(`[API] Token: ${tokenMint}`);
     console.log(`[API] Method: ${fast ? "fast" : "standard"}`);
     console.log(`[API] Max Transactions: ${maxTxns}`);
     console.log(`[API] Time Range: ${filterStartTime ? new Date(filterStartTime * 1000).toISOString() : 'beginning'} to ${filterEndTime ? new Date(filterEndTime * 1000).toISOString() : 'now'}`);
+    if (minBuyVolumeUSD) {
+      console.log(`[API] Min Buy Volume: $${minBuyVolumeUSD} USD`);
+    }
 
     const apiStartTime = Date.now();
 
     const result = fast
-      ? await calculateTokenVolumeFast(walletAddress, tokenMint, filterStartTime, filterEndTime)
-      : await calculateTokenVolume(walletAddress, tokenMint, maxTxns, filterStartTime, filterEndTime);
+      ? await calculateTokenVolumeFast(walletAddress, tokenMint, filterStartTime, filterEndTime, minBuyVolumeUSD)
+      : await calculateTokenVolume(walletAddress, tokenMint, maxTxns, filterStartTime, filterEndTime, minBuyVolumeUSD);
 
     const duration = Date.now() - apiStartTime;
     console.log(`[API] Calculation completed in ${duration}ms`);
@@ -173,9 +178,11 @@ export async function POST(request: NextRequest) {
         tokenMint: result.tokenMint,
         tokenAccount: result.tokenAccount,
         totalSwapTransactions: result.totalSwapTransactions,
+        filteredSwapTransactions: result.filteredSwapTransactions,
         totalVolume: result.totalVolume,
         volumeUSD: result.volumeUSD,
         tokenPrice: result.tokenPrice,
+        minBuyVolumeUSD: result.minBuyVolumeUSD,
         swaps: result.swaps.map((swap) => ({
           signature: swap.signature,
           timestamp: swap.timestamp,
@@ -190,6 +197,7 @@ export async function POST(request: NextRequest) {
           startTime: filterStartTime || null,
           endTime: filterEndTime || null,
         },
+        minBuyVolumeUSD: minBuyVolumeUSD || null,
       },
     });
   } catch (error) {

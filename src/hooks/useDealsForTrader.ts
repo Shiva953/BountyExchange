@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { getProgram } from "@/program/instructions/createDeal";
@@ -17,6 +17,7 @@ export interface DealAccount {
   trader: PublicKey;
   rewardAmount: BN;
   targetVolume: BN;
+  minBuyVolume: BN | null;
   expirationWindowInHours: BN;
   holdDurationInHours: BN;
   escrowVault: PublicKey;
@@ -36,6 +37,17 @@ export function useDealsForTrader() {
   const [deals, setDeals] = useState<DealWithMetadata[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const previousWalletRef = useRef<string | null>(null);
+
+  // Clear deals immediately when wallet changes
+  useEffect(() => {
+    const currentWallet = publicKey?.toBase58() ?? null;
+    if (previousWalletRef.current !== currentWallet) {
+      setDeals([]);
+      setError(null);
+      previousWalletRef.current = currentWallet;
+    }
+  }, [publicKey]);
 
   const fetchDeals = useCallback(async () => {
     if (!publicKey) {
@@ -72,6 +84,7 @@ export function useDealsForTrader() {
             trader: deal.account.trader,
             rewardAmount: deal.account.rewardAmount,
             targetVolume: deal.account.targetVolume,
+            minBuyVolume: deal.account.minBuyVolume ?? null,
             expirationWindowInHours: deal.account.expirationWindowInHours,
             holdDurationInHours: deal.account.holdDurationInHours,
             escrowVault: deal.account.escrowVault,

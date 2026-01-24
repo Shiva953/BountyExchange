@@ -21,6 +21,7 @@ interface CreateDealRequestBody {
   trader: string;
   rewardAmount: string;
   targetVolume: string;
+  minBuyVolume?: string;
   expirationWindowInHours: string;
   holdDurationInHours: string;
 }
@@ -87,12 +88,22 @@ export async function POST(request: NextRequest) {
     const expirationWindowInHours = new BN(body.expirationWindowInHours);
     const holdDurationInHours = new BN(body.holdDurationInHours);
 
+    // Parse optional minBuyVolume
+    let minBuyVolume: BN | null = null;
+    if (body.minBuyVolume) {
+      const minBuyVolumeRaw = parseFloat(body.minBuyVolume);
+      if (!isNaN(minBuyVolumeRaw) && minBuyVolumeRaw > 0) {
+        minBuyVolume = new BN(Math.floor(minBuyVolumeRaw * 10 ** USDC_DECIMALS));
+      }
+    }
+
     const args: CreateDealArgs = {
       dealId,
       token: tokenPubkey,
       trader: traderPubkey,
       rewardAmount,
       targetVolume,
+      minBuyVolume,
       expirationWindowInHours,
       holdDurationInHours,
     };

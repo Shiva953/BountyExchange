@@ -71,10 +71,12 @@ interface VolumeResult {
   tokenMint: string;
   tokenAccount: string | null;
   totalSwapTransactions: number;
+  filteredSwapTransactions?: number;
   totalVolume: number;
   volumeUSD: number;
   tokenPrice: number | null;
   swaps: SwapTransaction[];
+  minBuyVolumeUSD?: number;
   error?: string;
 }
 
@@ -313,6 +315,7 @@ export async function getEnhancedTransactions(
 const DEX_SOURCES = [
   "JUPITER",
   "RAYDIUM",
+  "DFLOW",
   "ORCA",
   "METEORA",
   "PHOENIX",
@@ -334,13 +337,10 @@ const SWAP_TYPES = [
 ];
 
 /**
- * Filters transactions to find swaps involving the target token.
+ * Filters transactions to find BUY swaps involving the target token.
  *
- * IMPORTANT: A swap can have multiple transfers of the target token:
- * - User -> DEX (selling the token)
- * - DEX -> User (buying the token)
- *
- * We sum ALL transfers involving the wallet and target token to get true volume.
+ * Only counts transfers where the wallet RECEIVES the token (buys).
+ * Excludes transfers where the wallet SENDS the token (sells).
  */
 export function filterSwapTransactions(
   transactions: EnhancedTransaction[],
@@ -375,20 +375,18 @@ export function filterSwapTransactions(
     if (tx.tokenTransfers && tx.tokenTransfers.length > 0) {
       for (const transfer of tx.tokenTransfers) {
         const mintMatch = transfer.mint?.toLowerCase() === tokenMintLower;
-        const walletInvolved =
-          transfer.fromUserAccount?.toLowerCase() === walletLower ||
+        // Only count BUY transactions: wallet receives the token
+        const walletReceiving =
           transfer.toUserAccount?.toLowerCase() === walletLower;
-        const tokenAccountInvolved = tokenAccountLower && (
-          transfer.fromTokenAccount?.toLowerCase() === tokenAccountLower ||
-          transfer.toTokenAccount?.toLowerCase() === tokenAccountLower
-        );
+        const tokenAccountReceiving = tokenAccountLower &&
+          transfer.toTokenAccount?.toLowerCase() === tokenAccountLower;
 
-        if (mintMatch && (walletInvolved || tokenAccountInvolved)) {
+        if (mintMatch && (walletReceiving || tokenAccountReceiving)) {
           const amount = Math.abs(transfer.tokenAmount || 0);
           totalTokenAmount += amount;
           foundTransfers = true;
 
-          debug("filterSwapTransactions", `Token transfer found:`, {
+          debug("filterSwapTransactions", `Token transfer found (BUY):`, {
             signature: tx.signature,
             from: transfer.fromUserAccount,
             to: transfer.toUserAccount,
@@ -423,9 +421,15 @@ export function filterSwapTransactions(
             if (mintMatch && userMatch) {
               const decimals = change.rawTokenAmount?.decimals || 0;
               const rawAmount = parseFloat(change.rawTokenAmount?.tokenAmount || "0");
-              const tokenAmount = Math.abs(rawAmount / Math.pow(10, decimals));
 
-              debug("filterSwapTransactions", `Balance change found:`, {
+              // Only count positive balance changes (buys), skip negative (sells)
+              if (rawAmount <= 0) {
+                continue;
+              }
+
+              const tokenAmount = rawAmount / Math.pow(10, decimals);
+
+              debug("filterSwapTransactions", `Balance change found (BUY):`, {
                 signature: tx.signature,
                 amount: tokenAmount,
                 mint: change.mint,
@@ -457,26 +461,48 @@ export function filterSwapTransactions(
 
 /**
  * Calculates total volume from swap transactions
+ *
+ * @param swaps - Array of swap transactions
+ * @param tokenPrice - Current token price in USD
+ * @param minBuyVolumeUSD - Optional minimum buy volume in USD. Swaps below this are not counted.
  */
 export function calculateVolumeFromSwaps(
   swaps: SwapTransaction[],
-  tokenPrice: number | null
-): { totalVolume: number; volumeUSD: number } {
+  tokenPrice: number | null,
+  minBuyVolumeUSD?: number
+): { totalVolume: number; volumeUSD: number; filteredSwapCount: number; totalSwapCount: number } {
   debug("calculateVolumeFromSwaps", `Calculating volume from ${swaps.length} swaps`);
+  if (minBuyVolumeUSD) {
+    debug("calculateVolumeFromSwaps", `Filtering swaps below $${minBuyVolumeUSD} USD`);
+  }
 
   let totalVolume = 0;
+  let filteredSwapCount = 0;
+  const totalSwapCount = swaps.length;
 
   for (const swap of swaps) {
+    const swapUSD = tokenPrice ? swap.tokenAmount * tokenPrice : 0;
+
+    // If minBuyVolumeUSD is set, skip swaps below the threshold
+    if (minBuyVolumeUSD && tokenPrice && swapUSD < minBuyVolumeUSD) {
+      debug("calculateVolumeFromSwaps", `Swap ${swap.signature.slice(0, 8)}... SKIPPED: $${swapUSD.toFixed(2)} < min $${minBuyVolumeUSD}`);
+      continue;
+    }
+
     totalVolume += swap.tokenAmount;
-    debug("calculateVolumeFromSwaps", `Swap ${swap.signature.slice(0, 8)}...: ${swap.tokenAmount} tokens`);
+    filteredSwapCount++;
+    debug("calculateVolumeFromSwaps", `Swap ${swap.signature.slice(0, 8)}...: ${swap.tokenAmount} tokens ($${swapUSD.toFixed(2)} USD)`);
   }
 
   const volumeUSD = tokenPrice ? totalVolume * tokenPrice : 0;
 
   debug("calculateVolumeFromSwaps", `Total volume: ${totalVolume} tokens`);
   debug("calculateVolumeFromSwaps", `Volume in USD: $${volumeUSD.toFixed(2)}`);
+  if (minBuyVolumeUSD) {
+    debug("calculateVolumeFromSwaps", `Swaps counted: ${filteredSwapCount}/${totalSwapCount} (filtered by min $${minBuyVolumeUSD})`);
+  }
 
-  return { totalVolume, volumeUSD };
+  return { totalVolume, volumeUSD, filteredSwapCount, totalSwapCount };
 }
 
 /**
@@ -487,6 +513,7 @@ export function calculateVolumeFromSwaps(
  * @param maxTransactions - Maximum number of transactions to fetch per page (default 500)
  * @param startTime - Optional start timestamp (unix seconds). Only count txns after this time.
  * @param endTime - Optional end timestamp (unix seconds). Only count txns before this time.
+ * @param minBuyVolumeUSD - Optional minimum buy volume in USD. Swaps below this threshold are not counted.
  *
  * If neither startTime nor endTime is provided, calculates volume for ALL transactions (lifetime).
  * @returns VolumeResult with total volume and swap details
@@ -496,13 +523,17 @@ export async function calculateTokenVolume(
   tokenMint: string,
   maxTransactions: number = 500,
   startTime?: number,
-  endTime?: number
+  endTime?: number,
+  minBuyVolumeUSD?: number
 ): Promise<VolumeResult> {
   console.log("=".repeat(60));
   console.log("[VOLUME TRACKER] Starting volume calculation");
   console.log(`Wallet: ${walletAddress}`);
   console.log(`Token Mint: ${tokenMint}`);
   console.log(`Time Range: ${startTime ? new Date(startTime * 1000).toISOString() : 'beginning'} to ${endTime ? new Date(endTime * 1000).toISOString() : 'now'}`);
+  if (minBuyVolumeUSD) {
+    console.log(`Min Buy Volume: $${minBuyVolumeUSD} USD (swaps below this are not counted)`);
+  }
   console.log("=".repeat(60));
 
   try {
@@ -542,11 +573,14 @@ export async function calculateTokenVolume(
     console.log(`Token Price: ${tokenPrice ? `$${tokenPrice}` : "Not available"}`);
 
     console.log("\n[STEP 6] Calculating volume...");
-    const { totalVolume, volumeUSD } = calculateVolumeFromSwaps(swaps, tokenPrice);
+    const { totalVolume, volumeUSD, filteredSwapCount, totalSwapCount } = calculateVolumeFromSwaps(swaps, tokenPrice, minBuyVolumeUSD);
 
     console.log("\n" + "=".repeat(60));
     console.log("[VOLUME TRACKER] Calculation Complete");
-    console.log(`Total Swap Transactions: ${swaps.length}`);
+    console.log(`Total Swap Transactions: ${totalSwapCount}`);
+    if (minBuyVolumeUSD) {
+      console.log(`Swaps Meeting Min Buy Requirement: ${filteredSwapCount}/${totalSwapCount}`);
+    }
     console.log(`Total Volume (tokens): ${totalVolume}`);
     console.log(`Total Volume (USD): $${volumeUSD.toFixed(2)}`);
     console.log("=".repeat(60));
@@ -556,11 +590,13 @@ export async function calculateTokenVolume(
       walletAddress,
       tokenMint,
       tokenAccount,
-      totalSwapTransactions: swaps.length,
+      totalSwapTransactions: totalSwapCount,
+      filteredSwapTransactions: minBuyVolumeUSD ? filteredSwapCount : undefined,
       totalVolume,
       volumeUSD,
       tokenPrice,
       swaps,
+      minBuyVolumeUSD,
     };
 
   } catch (error) {
@@ -734,6 +770,7 @@ export async function getSwapTransactionsForAddress(
  * @param tokenMint - The token mint address
  * @param startTime - Optional start timestamp (unix seconds). Only count txns after this time.
  * @param endTime - Optional end timestamp (unix seconds). Only count txns before this time.
+ * @param minBuyVolumeUSD - Optional minimum buy volume in USD. Swaps below this threshold are not counted.
  *
  * If neither startTime nor endTime is provided, calculates volume for ALL transactions (lifetime).
  */
@@ -741,13 +778,17 @@ export async function calculateTokenVolumeFast(
   walletAddress: string,
   tokenMint: string,
   startTime?: number,
-  endTime?: number
+  endTime?: number,
+  minBuyVolumeUSD?: number
 ): Promise<VolumeResult> {
   console.log("=".repeat(60));
   console.log("[VOLUME TRACKER FAST] Starting volume calculation");
   console.log(`Wallet: ${walletAddress}`);
   console.log(`Token Mint: ${tokenMint}`);
   console.log(`Time Range: ${startTime ? new Date(startTime * 1000).toISOString() : 'beginning'} to ${endTime ? new Date(endTime * 1000).toISOString() : 'now'}`);
+  if (minBuyVolumeUSD) {
+    console.log(`Min Buy Volume: $${minBuyVolumeUSD} USD (swaps below this are not counted)`);
+  }
   console.log("=".repeat(60));
 
   try {
@@ -771,20 +812,18 @@ export async function calculateTokenVolumeFast(
 
       for (const transfer of tx.tokenTransfers || []) {
         if (transfer.mint?.toLowerCase() === tokenMintLower) {
-          const walletInvolved =
-            transfer.fromUserAccount?.toLowerCase() === walletLower ||
+          // Only count BUY transactions: wallet receives the token
+          const walletReceiving =
             transfer.toUserAccount?.toLowerCase() === walletLower;
-          const tokenAccountInvolved = tokenAccountLower && (
-            transfer.fromTokenAccount?.toLowerCase() === tokenAccountLower ||
-            transfer.toTokenAccount?.toLowerCase() === tokenAccountLower
-          );
+          const tokenAccountReceiving = tokenAccountLower &&
+            transfer.toTokenAccount?.toLowerCase() === tokenAccountLower;
 
-          if (walletInvolved || tokenAccountInvolved) {
+          if (walletReceiving || tokenAccountReceiving) {
             const amount = Math.abs(transfer.tokenAmount || 0);
             tokenAmount += amount;
             foundTransfers = true;
 
-            debug("calculateTokenVolumeFast", `Transfer in tx ${tx.signature.slice(0, 8)}...:`, {
+            debug("calculateTokenVolumeFast", `Transfer (BUY) in tx ${tx.signature.slice(0, 8)}...:`, {
               from: transfer.fromUserAccount,
               to: transfer.toUserAccount,
               amount: amount,
@@ -804,11 +843,17 @@ export async function calculateTokenVolumeFast(
               if (userMatch) {
                 const decimals = change.rawTokenAmount?.decimals || 0;
                 const rawAmount = parseFloat(change.rawTokenAmount?.tokenAmount || "0");
-                const amount = Math.abs(rawAmount / Math.pow(10, decimals));
+
+                // Only count positive balance changes (buys), skip negative (sells)
+                if (rawAmount <= 0) {
+                  continue;
+                }
+
+                const amount = rawAmount / Math.pow(10, decimals);
                 tokenAmount += amount;
                 foundTransfers = true;
 
-                debug("calculateTokenVolumeFast", `Balance change in tx ${tx.signature.slice(0, 8)}...:`, {
+                debug("calculateTokenVolumeFast", `Balance change (BUY) in tx ${tx.signature.slice(0, 8)}...:`, {
                   amount: amount,
                   runningTotal: tokenAmount,
                 });
@@ -837,11 +882,14 @@ export async function calculateTokenVolumeFast(
     console.log(`Token Price: ${tokenPrice ? `$${tokenPrice}` : "Not available"}`);
 
     console.log("\n[STEP 5] Calculating volume...");
-    const { totalVolume, volumeUSD } = calculateVolumeFromSwaps(swaps, tokenPrice);
+    const { totalVolume, volumeUSD, filteredSwapCount, totalSwapCount } = calculateVolumeFromSwaps(swaps, tokenPrice, minBuyVolumeUSD);
 
     console.log("\n" + "=".repeat(60));
     console.log("[VOLUME TRACKER FAST] Calculation Complete");
-    console.log(`Total Swap Transactions: ${swaps.length}`);
+    console.log(`Total Swap Transactions: ${totalSwapCount}`);
+    if (minBuyVolumeUSD) {
+      console.log(`Swaps Meeting Min Buy Requirement: ${filteredSwapCount}/${totalSwapCount}`);
+    }
     console.log(`Total Volume (tokens): ${totalVolume}`);
     console.log(`Total Volume (USD): $${volumeUSD.toFixed(2)}`);
     console.log("=".repeat(60));
@@ -851,11 +899,13 @@ export async function calculateTokenVolumeFast(
       walletAddress,
       tokenMint,
       tokenAccount,
-      totalSwapTransactions: swaps.length,
+      totalSwapTransactions: totalSwapCount,
+      filteredSwapTransactions: minBuyVolumeUSD ? filteredSwapCount : undefined,
       totalVolume,
       volumeUSD,
       tokenPrice,
       swaps,
+      minBuyVolumeUSD,
     };
 
   } catch (error) {

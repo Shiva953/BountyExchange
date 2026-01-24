@@ -6,6 +6,7 @@ interface VolumeRequest {
   token: string;
   startTime?: number;
   endTime?: number;
+  minBuyVolume?: number;
   key: string; // unique identifier for this request
 }
 
@@ -71,12 +72,14 @@ export async function POST(request: NextRequest) {
         try {
           const filterStartTime = req.startTime ? Number(req.startTime) : undefined;
           const filterEndTime = req.endTime ? Number(req.endTime) : undefined;
+          const minBuyVolumeUSD = req.minBuyVolume ? Number(req.minBuyVolume) : undefined;
 
           const result = await calculateTokenVolumeFast(
             req.wallet,
             req.token,
             filterStartTime,
-            filterEndTime
+            filterEndTime,
+            minBuyVolumeUSD
           );
 
           if (!result.success) {

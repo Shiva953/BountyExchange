@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useDealsForTrader, DealWithMetadata } from "@/hooks/useDealsForTrader";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Target } from "lucide-react";
+import { ChevronLeft, ChevronRight, Target, ArrowUpDown, Filter } from "lucide-react";
 import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 
 // Using 9 decimals for stored amounts
@@ -105,12 +105,18 @@ function DealCard({ deal, onClick }: DealCardProps) {
         </div>
       </div>
 
-      {/* Stats: Target Volume and Expires */}
-      <div className="flex justify-center gap-8 mb-5">
+      {/* Stats: Target Volume, Min Buy, and Expires */}
+      <div className={`flex justify-center mb-5 ${deal.minBuyVolume ? "gap-4" : "gap-8"}`}>
         <div className="text-center">
           <p className="text-gray-500 text-[11px] tracking-tight">Target Volume</p>
           <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatVolume(deal.targetVolume.toNumber())}</p>
         </div>
+        {deal.minBuyVolume && (
+          <div className="text-center">
+            <p className="text-gray-500 text-[11px] tracking-tight">Min Buy</p>
+            <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatVolume(deal.minBuyVolume.toNumber())}</p>
+          </div>
+        )}
         <div className="text-center">
           <p className="text-gray-500 text-[11px] tracking-tight">Expires in</p>
           <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{deal.expirationWindowInHours.toNumber()}h</p>
@@ -165,6 +171,9 @@ function LoadingCard() {
   );
 }
 
+type SortOption = "reward_desc" | "reward_asc" | "volume_desc" | "volume_asc" | "expiry_asc" | "expiry_desc";
+type VolumeFilter = "all" | "no_min" | "has_min";
+
 interface DealCarouselProps {
   searchQuery?: string;
 }
@@ -174,16 +183,70 @@ export function DealCarousel({ searchQuery = "" }: DealCarouselProps) {
   const { publicKey } = useWallet();
   const { deals, loading, error } = useDealsForTrader();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [sortBy, setSortBy] = useState<SortOption>("reward_desc");
+  const [volumeFilter, setVolumeFilter] = useState<VolumeFilter>("all");
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [showVolumeDropdown, setShowVolumeDropdown] = useState(false);
 
-  // Filter deals based on search query (token name, symbol, or address)
-  const filteredDeals = deals.filter((deal) => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    const tokenName = deal.tokenMetadata?.name?.toLowerCase() || "";
-    const tokenSymbol = deal.tokenMetadata?.symbol?.toLowerCase() || "";
-    const tokenAddress = deal.token.toBase58().toLowerCase();
-    return tokenName.includes(query) || tokenSymbol.includes(query) || tokenAddress.includes(query);
-  });
+  // Filter and sort deals
+  const filteredDeals = useMemo(() => {
+    let result = [...deals];
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((deal) => {
+        const tokenName = deal.tokenMetadata?.name?.toLowerCase() || "";
+        const tokenSymbol = deal.tokenMetadata?.symbol?.toLowerCase() || "";
+        const tokenAddress = deal.token.toBase58().toLowerCase();
+        return tokenName.includes(query) || tokenSymbol.includes(query) || tokenAddress.includes(query);
+      });
+    }
+
+    // Volume requirement filter
+    if (volumeFilter === "no_min") {
+      result = result.filter((deal) => !deal.minBuyVolume);
+    } else if (volumeFilter === "has_min") {
+      result = result.filter((deal) => deal.minBuyVolume);
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case "reward_desc":
+          return b.rewardAmount.toNumber() - a.rewardAmount.toNumber();
+        case "reward_asc":
+          return a.rewardAmount.toNumber() - b.rewardAmount.toNumber();
+        case "volume_desc":
+          return b.targetVolume.toNumber() - a.targetVolume.toNumber();
+        case "volume_asc":
+          return a.targetVolume.toNumber() - b.targetVolume.toNumber();
+        case "expiry_asc":
+          return a.expirationWindowInHours.toNumber() - b.expirationWindowInHours.toNumber();
+        case "expiry_desc":
+          return b.expirationWindowInHours.toNumber() - a.expirationWindowInHours.toNumber();
+        default:
+          return 0;
+      }
+    });
+
+    return result;
+  }, [deals, searchQuery, sortBy, volumeFilter]);
+
+  const sortLabels: Record<SortOption, string> = {
+    reward_desc: "Reward: High to Low",
+    reward_asc: "Reward: Low to High",
+    volume_desc: "Volume: High to Low",
+    volume_asc: "Volume: Low to High",
+    expiry_asc: "Expiry: Soonest",
+    expiry_desc: "Expiry: Latest",
+  };
+
+  const volumeFilterLabels: Record<VolumeFilter, string> = {
+    all: "All Bounties",
+    no_min: "No Min Buy Size",
+    has_min: "Has Min Buy Size",
+  };
 
   const handleCardClick = (deal: DealWithMetadata) => {
     router.push(`/deal/${deal.publicKey.toBase58()}`);
@@ -207,14 +270,86 @@ export function DealCarousel({ searchQuery = "" }: DealCarouselProps) {
   return (
     <div className="w-full mb-12">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="flex items-center justify-center w-8 h-8 rounded-full border border-[#3a3a3a]">
-          <Target className="w-4 h-4 text-white" />
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-8 h-8 rounded-full border border-[#3a3a3a]">
+            <Target className="w-4 h-4 text-white" />
+          </div>
+          <h2 className="text-white font-semibold text-lg tracking-tight">
+            Available Bounties
+          </h2>
         </div>
-        <h2 className="text-white font-semibold text-lg tracking-tight">
-          Available Bounties
-        </h2>
-        <div className="flex-1 h-px bg-gradient-to-r from-[#3a3a3a] to-transparent ml-4" />
+
+        {/* Filter Controls */}
+        <div className="flex items-center gap-2">
+          {/* Sort Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowSortDropdown(!showSortDropdown);
+                setShowVolumeDropdown(false);
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-zinc-800 rounded-full text-xs text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
+            >
+              <ArrowUpDown className="w-3 h-3" />
+              {sortLabels[sortBy].split(":")[0]}
+            </button>
+            {showSortDropdown && (
+              <div className="absolute right-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-20 min-w-[180px]">
+                {(Object.keys(sortLabels) as SortOption[]).map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => {
+                      setSortBy(option);
+                      setShowSortDropdown(false);
+                    }}
+                    className={`w-full px-4 py-2.5 text-xs text-left tracking-tight transition-colors cursor-pointer ${
+                      sortBy === option
+                        ? "bg-white/10 text-white"
+                        : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    {sortLabels[option]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Volume Filter Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowVolumeDropdown(!showVolumeDropdown);
+                setShowSortDropdown(false);
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-zinc-800 rounded-full text-xs text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
+            >
+              <Filter className="w-3 h-3" />
+              {volumeFilter === "all" ? "Min Buy" : volumeFilterLabels[volumeFilter].replace("Has ", "").replace("No ", "")}
+            </button>
+            {showVolumeDropdown && (
+              <div className="absolute right-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-20 min-w-[160px]">
+                {(Object.keys(volumeFilterLabels) as VolumeFilter[]).map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => {
+                      setVolumeFilter(option);
+                      setShowVolumeDropdown(false);
+                    }}
+                    className={`w-full px-4 py-2.5 text-xs text-left tracking-tight transition-colors cursor-pointer ${
+                      volumeFilter === option
+                        ? "bg-white/10 text-white"
+                        : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    {volumeFilterLabels[option]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Carousel */}

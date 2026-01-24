@@ -126,7 +126,7 @@ function ProfileCard({ walletAddress, activeBounties, volumeCompleted, isOwnProf
             </div>
             <div>
               <p className="text-zinc-500 text-xs tracking-tight">Volume Completed</p>
-              <p className="text-white font-bold text-xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatVolume(volumeCompleted)}</p>
+              <p className="text-white font-bold text-xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatVolumeUSD(volumeCompleted)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -145,6 +145,8 @@ function ProfileCard({ walletAddress, activeBounties, volumeCompleted, isOwnProf
 }
 
 type RewardFilter = "all" | "1k" | "5k" | "10k";
+type SortOption = "reward_desc" | "reward_asc" | "volume_desc" | "volume_asc" | "expiry_asc" | "expiry_desc";
+type MinBuyFilter = "all" | "no_min" | "has_min";
 
 interface TabsProps {
   activeTab: "active" | "completed";
@@ -155,10 +157,16 @@ interface TabsProps {
   onSearchChange: (query: string) => void;
   rewardFilter: RewardFilter;
   onRewardFilterChange: (filter: RewardFilter) => void;
+  sortBy: SortOption;
+  onSortChange: (sort: SortOption) => void;
+  minBuyFilter: MinBuyFilter;
+  onMinBuyFilterChange: (filter: MinBuyFilter) => void;
 }
 
-function Tabs({ activeTab, onTabChange, activeCount, completedCount, searchQuery, onSearchChange, rewardFilter, onRewardFilterChange }: TabsProps) {
+function Tabs({ activeTab, onTabChange, activeCount, completedCount, searchQuery, onSearchChange, rewardFilter, onRewardFilterChange, sortBy, onSortChange, minBuyFilter, onMinBuyFilterChange }: TabsProps) {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [showMinBuyDropdown, setShowMinBuyDropdown] = useState(false);
 
   const filterLabels: Record<RewardFilter, string> = {
     all: "All",
@@ -167,31 +175,46 @@ function Tabs({ activeTab, onTabChange, activeCount, completedCount, searchQuery
     "10k": ">$10K",
   };
 
+  const sortLabels: Record<SortOption, string> = {
+    reward_desc: "Reward: High to Low",
+    reward_asc: "Reward: Low to High",
+    volume_desc: "Volume: High to Low",
+    volume_asc: "Volume: Low to High",
+    expiry_asc: "Expiry: Soonest",
+    expiry_desc: "Expiry: Latest",
+  };
+
+  const minBuyLabels: Record<MinBuyFilter, string> = {
+    all: "All",
+    no_min: "No Min Buy",
+    has_min: "Has Min Buy",
+  };
+
   return (
-    <div className="flex items-center justify-between gap-4 mb-6">
-      <div className="flex gap-2">
-        <button
-          onClick={() => onTabChange("active")}
-          className={`px-6 py-2.5 rounded-full font-semibold text-sm tracking-tight transition-all cursor-pointer ${
-            activeTab === "active"
-              ? "bg-white text-black"
-              : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
-          }`}
-        >
-          Active ({activeCount})
-        </button>
-        <button
-          onClick={() => onTabChange("completed")}
-          className={`px-6 py-2.5 rounded-full font-semibold text-sm tracking-tight transition-all cursor-pointer ${
-            activeTab === "completed"
-              ? "bg-white text-black"
-              : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
-          }`}
-        >
-          Completed ({completedCount})
-        </button>
-      </div>
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col gap-4 mb-6">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex gap-2">
+          <button
+            onClick={() => onTabChange("active")}
+            className={`px-6 py-2.5 rounded-full font-semibold text-sm tracking-tight transition-all cursor-pointer ${
+              activeTab === "active"
+                ? "bg-white text-black"
+                : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            Active ({activeCount})
+          </button>
+          <button
+            onClick={() => onTabChange("completed")}
+            className={`px-6 py-2.5 rounded-full font-semibold text-sm tracking-tight transition-all cursor-pointer ${
+              activeTab === "completed"
+                ? "bg-white text-black"
+                : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            Completed ({completedCount})
+          </button>
+        </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
@@ -202,16 +225,59 @@ function Tabs({ activeTab, onTabChange, activeCount, completedCount, searchQuery
             className="pl-9 pr-4 py-2 bg-white/5 border border-zinc-800 rounded-full text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-zinc-600 w-48 tracking-tight"
           />
         </div>
+      </div>
+
+      {/* Filter Row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Sort Dropdown */}
         <div className="relative">
           <button
-            onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-            className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-zinc-800 rounded-full text-sm text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
+            onClick={() => {
+              setShowSortDropdown(!showSortDropdown);
+              setShowFilterDropdown(false);
+              setShowMinBuyDropdown(false);
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-zinc-800 rounded-full text-xs text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
           >
-            <ArrowUpDown className="w-4 h-4" />
+            <ArrowUpDown className="w-3 h-3" />
+            {sortLabels[sortBy].split(":")[0]}
+          </button>
+          {showSortDropdown && (
+            <div className="absolute left-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-20 min-w-[180px]">
+              {(Object.keys(sortLabels) as SortOption[]).map((option) => (
+                <button
+                  key={option}
+                  onClick={() => {
+                    onSortChange(option);
+                    setShowSortDropdown(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-xs text-left tracking-tight transition-colors cursor-pointer ${
+                    sortBy === option
+                      ? "bg-white/10 text-white"
+                      : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  {sortLabels[option]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Reward Filter Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => {
+              setShowFilterDropdown(!showFilterDropdown);
+              setShowSortDropdown(false);
+              setShowMinBuyDropdown(false);
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-zinc-800 rounded-full text-xs text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
+          >
             Reward: {filterLabels[rewardFilter]}
           </button>
           {showFilterDropdown && (
-            <div className="absolute right-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-10 min-w-[120px]">
+            <div className="absolute left-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-20 min-w-[120px]">
               {(["all", "1k", "5k", "10k"] as RewardFilter[]).map((filter) => (
                 <button
                   key={filter}
@@ -219,13 +285,47 @@ function Tabs({ activeTab, onTabChange, activeCount, completedCount, searchQuery
                     onRewardFilterChange(filter);
                     setShowFilterDropdown(false);
                   }}
-                  className={`w-full px-4 py-2.5 text-sm text-left tracking-tight transition-colors cursor-pointer ${
+                  className={`w-full px-4 py-2.5 text-xs text-left tracking-tight transition-colors cursor-pointer ${
                     rewardFilter === filter
                       ? "bg-white/10 text-white"
                       : "text-zinc-400 hover:bg-white/5 hover:text-white"
                   }`}
                 >
                   {filterLabels[filter]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Min Buy Filter Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => {
+              setShowMinBuyDropdown(!showMinBuyDropdown);
+              setShowSortDropdown(false);
+              setShowFilterDropdown(false);
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-zinc-800 rounded-full text-xs text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
+          >
+            Min Buy: {minBuyLabels[minBuyFilter]}
+          </button>
+          {showMinBuyDropdown && (
+            <div className="absolute left-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-20 min-w-[140px]">
+              {(Object.keys(minBuyLabels) as MinBuyFilter[]).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => {
+                    onMinBuyFilterChange(filter);
+                    setShowMinBuyDropdown(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-xs text-left tracking-tight transition-colors cursor-pointer ${
+                    minBuyFilter === filter
+                      ? "bg-white/10 text-white"
+                      : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  {minBuyLabels[filter]}
                 </button>
               ))}
             </div>
@@ -306,14 +406,22 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
         </div>
       </div>
 
-      {/* Stats: Target Volume and Status */}
-      <div className="grid grid-cols-2 gap-4 mb-5">
+      {/* Stats: Target Volume, Min Buy, and Status */}
+      <div className={`grid gap-4 mb-5 ${deal.minBuyVolume ? "grid-cols-3" : "grid-cols-2"}`}>
         <div className="bg-white/5 rounded-xl p-3">
           <p className="text-zinc-500 text-xs tracking-tight mb-1">Target Volume</p>
           <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
             {formatVolume(deal.targetVolume.toNumber())}
           </p>
         </div>
+        {deal.minBuyVolume && (
+          <div className="bg-white/5 rounded-xl p-3">
+            <p className="text-zinc-500 text-xs tracking-tight mb-1">Min Buy Size</p>
+            <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
+              {formatVolume(deal.minBuyVolume.toNumber())}
+            </p>
+          </div>
+        )}
         <div className="bg-white/5 rounded-xl p-3">
           <p className="text-zinc-500 text-xs tracking-tight mb-1">Status</p>
           <p className={`font-semibold text-lg tracking-tight ${isCompleted ? "text-green-400" : "text-[#f5a0ac]"}`}>
@@ -410,6 +518,8 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
   const [searchQuery, setSearchQuery] = useState("");
   const [rewardFilter, setRewardFilter] = useState<RewardFilter>("all");
+  const [sortBy, setSortBy] = useState<SortOption>("reward_desc");
+  const [minBuyFilter, setMinBuyFilter] = useState<MinBuyFilter>("all");
 
   const isOwnProfile = publicKey?.toBase58() === walletAddress;
 
@@ -441,8 +551,32 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
         filtered = filtered.filter((deal) => deal.rewardAmount.toNumber() > threshold);
       }
 
-      // Sort by reward descending
-      filtered = [...filtered].sort((a, b) => b.rewardAmount.toNumber() - a.rewardAmount.toNumber());
+      // Apply min buy filter
+      if (minBuyFilter === "no_min") {
+        filtered = filtered.filter((deal) => !deal.minBuyVolume);
+      } else if (minBuyFilter === "has_min") {
+        filtered = filtered.filter((deal) => deal.minBuyVolume);
+      }
+
+      // Sort based on selected option
+      filtered = [...filtered].sort((a, b) => {
+        switch (sortBy) {
+          case "reward_desc":
+            return b.rewardAmount.toNumber() - a.rewardAmount.toNumber();
+          case "reward_asc":
+            return a.rewardAmount.toNumber() - b.rewardAmount.toNumber();
+          case "volume_desc":
+            return b.targetVolume.toNumber() - a.targetVolume.toNumber();
+          case "volume_asc":
+            return a.targetVolume.toNumber() - b.targetVolume.toNumber();
+          case "expiry_asc":
+            return a.expirationWindowInHours.toNumber() - b.expirationWindowInHours.toNumber();
+          case "expiry_desc":
+            return b.expirationWindowInHours.toNumber() - a.expirationWindowInHours.toNumber();
+          default:
+            return 0;
+        }
+      });
 
       return filtered;
     };
@@ -450,31 +584,56 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
     const active = filterAndSort(deals.filter((deal) => deal.isActive && deal.isAccepted));
     const completed = filterAndSort(deals.filter((deal) => !deal.isActive && deal.isAccepted));
     return { activeDeals: active, completedDeals: completed };
-  }, [deals, searchQuery, rewardFilter]);
+  }, [deals, searchQuery, rewardFilter, sortBy, minBuyFilter]);
 
   const displayedDeals = activeTab === "active" ? activeDeals : completedDeals;
 
-  // Create volume requests for all active deals (batch fetch in parallel)
+  // Create volume requests for all active and completed deals (batch fetch in parallel)
+  // Include minBuyVolume converted from USDC decimals to USD for filtering
   const volumeRequests = useMemo(() => {
-    return activeDeals.map((deal) => ({
+    const allDeals = [...activeDeals, ...completedDeals];
+    return allDeals.map((deal) => ({
       walletAddress,
       tokenMint: deal.token.toBase58(),
       startTime: deal.createdAt.toNumber(),
+      minBuyVolume: deal.minBuyVolume ? deal.minBuyVolume.toNumber() / 10 ** USDC_DECIMALS : undefined,
       key: deal.publicKey.toBase58(),
     }));
-  }, [activeDeals, walletAddress]);
+  }, [activeDeals, completedDeals, walletAddress]);
 
-  // Batch fetch volumes for all active deals in parallel
-  const { volumes, loadingKeys } = useBatchVolumeProgress(volumeRequests, activeDeals.length > 0);
+  // Batch fetch volumes for all deals in parallel
+  const { volumes, loadingKeys } = useBatchVolumeProgress(volumeRequests, volumeRequests.length > 0);
+
+  // Calculate total volume completed
+  const totalVolumeCompleted = useMemo(() => {
+    let total = 0;
+    
+    // For completed deals, use target volume (they're completed, so volume reached target)
+    completedDeals.forEach((deal) => {
+      const targetVolumeUSD = Number(deal.targetVolume) / 10 ** USDC_DECIMALS;
+      total += targetVolumeUSD;
+    });
+    
+    // For active deals, use actual tracked volume (if available)
+    activeDeals.forEach((deal) => {
+      const dealKey = deal.publicKey.toBase58();
+      const volumeData = volumes.get(dealKey);
+      if (volumeData) {
+        total += volumeData.volumeUSD;
+      }
+    });
+    
+    return total;
+  }, [activeDeals, completedDeals, volumes]);
 
   return (
-    <main className="min-h-screen pt-24 px-6 bg-black">
+    <main className="min-h-screen pt-24 px-6 bg-black pl-28">
       <div className="max-w-6xl mt-6 mx-auto">
         {/* Profile Card */}
         <ProfileCard
           walletAddress={walletAddress}
           activeBounties={activeDeals.length}
-          volumeCompleted={0} // Placeholder - will be implemented with transaction tracking
+          volumeCompleted={totalVolumeCompleted}
           isOwnProfile={isOwnProfile}
         />
 
@@ -524,6 +683,10 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
           onSearchChange={setSearchQuery}
           rewardFilter={rewardFilter}
           onRewardFilterChange={setRewardFilter}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          minBuyFilter={minBuyFilter}
+          onMinBuyFilterChange={setMinBuyFilter}
         />
 
         {/* Content */}

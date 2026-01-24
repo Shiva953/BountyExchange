@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { getProgram } from "@/program/instructions/createDeal";
@@ -12,6 +12,16 @@ export function useAcceptedDeals(walletAddress: string | null) {
   const [deals, setDeals] = useState<DealWithMetadata[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const previousWalletRef = useRef<string | null>(null);
+
+  // Clear deals immediately when wallet address changes
+  useEffect(() => {
+    if (previousWalletRef.current !== walletAddress) {
+      setDeals([]);
+      setError(null);
+      previousWalletRef.current = walletAddress;
+    }
+  }, [walletAddress]);
 
   const fetchDeals = useCallback(async () => {
     if (!walletAddress) {
@@ -58,6 +68,7 @@ export function useAcceptedDeals(walletAddress: string | null) {
             trader: deal.account.trader,
             rewardAmount: deal.account.rewardAmount,
             targetVolume: deal.account.targetVolume,
+            minBuyVolume: deal.account.minBuyVolume ?? null,
             expirationWindowInHours: deal.account.expirationWindowInHours,
             holdDurationInHours: deal.account.holdDurationInHours,
             escrowVault: deal.account.escrowVault,
