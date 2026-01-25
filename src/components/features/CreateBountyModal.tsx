@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Transaction } from "@solana/web3.js";
-import { ArrowLeft, ArrowUpRight, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, CheckCircle2, Loader2, ChevronDown, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,13 @@ import { Separator } from "@/components/ui/separator";
 interface CreateBountyModalProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+interface Trader {
+  id: number;
+  name: string;
+  address: string;
+  imageUrl: string | null;
 }
 
 interface BountyFormData {
@@ -57,6 +64,35 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
     expirationWindow: "",
     holdDuration: "",
   });
+  const [traders, setTraders] = useState<Trader[]>([]);
+  const [tradersLoading, setTradersLoading] = useState(false);
+  const [showTraderDropdown, setShowTraderDropdown] = useState(false);
+
+  // Fetch traders when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setTradersLoading(true);
+      fetch("/api/getTraders")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            // Deduplicate traders by name
+            const seenNames = new Set<string>();
+            const uniqueTraders = data.traders.filter((trader: Trader) => {
+              const name = trader.name?.toLowerCase();
+              if (!name || seenNames.has(name)) {
+                return false;
+              }
+              seenNames.add(name);
+              return true;
+            });
+            setTraders(uniqueTraders);
+          }
+        })
+        .catch((err) => console.error("Error fetching traders:", err))
+        .finally(() => setTradersLoading(false));
+    }
+  }, [isOpen]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) onClose();
@@ -272,13 +308,77 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="traderWallet" className="tracking-tight font-sans">Target Trader</Label>
-                  <Input
-                    id="traderWallet"
-                    // placeholder="Wallet address..."
-                    value={formData.traderWallet}
-                    onChange={(e) => handleInputChange("traderWallet", e.target.value)}
-                    className="rounded-none"
-                  />
+                  <div className="relative">
+                    <div className="flex gap-2">
+                      <Input
+                        id="traderWallet"
+                        placeholder="Wallet address..."
+                        value={formData.traderWallet}
+                        onChange={(e) => handleInputChange("traderWallet", e.target.value)}
+                        className="rounded-none flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowTraderDropdown(!showTraderDropdown)}
+                        className="rounded-none px-3 cursor-pointer"
+                      >
+                        <Users className="w-4 h-4 mr-1" />
+                        <ChevronDown className={`w-3 h-3 transition-transform ${showTraderDropdown ? "rotate-180" : ""}`} />
+                      </Button>
+                    </div>
+                    {showTraderDropdown && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-background border border-[#e84057]/30 shadow-lg">
+                        {tradersLoading ? (
+                          <>
+                            {[1, 2, 3, 4].map((i) => (
+                              <div key={i} className="w-full px-3 py-2 flex items-center gap-3 animate-pulse">
+                                <div className="w-6 h-6 rounded-full bg-zinc-700" />
+                                <div className="flex-1">
+                                  <div className="h-4 w-24 bg-zinc-700 rounded mb-1" />
+                                  <div className="h-3 w-20 bg-zinc-800 rounded" />
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        ) : traders.length === 0 ? (
+                          <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                            No traders found
+                          </div>
+                        ) : (
+                          traders.map((trader) => (
+                          <button
+                            key={trader.id}
+                            type="button"
+                            onClick={() => {
+                              handleInputChange("traderWallet", trader.address);
+                              setShowTraderDropdown(false);
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-[#e84057]/10 transition-colors cursor-pointer flex items-center gap-3"
+                          >
+                            {trader.imageUrl ? (
+                              <img
+                                src={trader.imageUrl}
+                                alt={trader.name}
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold">
+                                {trader.name?.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{trader.name}</p>
+                              <p className="text-xs text-muted-foreground font-mono truncate">
+                                {trader.address.slice(0, 4)}...{trader.address.slice(-4)}
+                              </p>
+                            </div>
+                          </button>
+                        ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

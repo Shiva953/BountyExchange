@@ -6,6 +6,56 @@ import bs58 from "bs58";
 
 const SIGN_MESSAGE = "Sign in to Bounty Exchange";
 
+// Helper function to check if error is a database connection error
+function isDbConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message;
+  return (
+    message.includes("Can't reach database server") ||
+    message.includes("P1001") ||
+    message.includes("connection") ||
+    message.includes("ECONNREFUSED") ||
+    message.includes("ETIMEDOUT") ||
+    message.includes("pool")
+  );
+}
+
+// Retry function with exponential backoff
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 5,
+  initialDelay: number = 500
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      // Only retry on database connection errors
+      if (!isDbConnectionError(error)) {
+        throw error;
+      }
+
+      // Don't retry on last attempt
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      // Calculate delay with exponential backoff: 500ms, 1000ms, 2000ms, 4000ms, 8000ms
+      const delay = initialDelay * Math.pow(2, attempt);
+      console.log(
+        `Database connection error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { walletAddress, signature } = await request.json();
@@ -80,36 +130,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find or create trader
-    // Use findFirst since the Prisma client may not recognize address as unique
-    let trader = await prisma.trader.findFirst({
-      where: { address: walletAddress },
-    });
+    // Find or create trader with retry logic for DB connection issues
+    // Use retryWithBackoff to handle pool/connection errors gracefully
+    const trader = await retryWithBackoff(async () => {
+      // First, try to find existing trader by address
+      const existingTrader = await prisma.trader.findFirst({
+        where: { address: walletAddress },
+      });
 
-    if (!trader) {
+      if (existingTrader) {
+        console.log(`Existing trader signed in: ${walletAddress} (name: ${existingTrader.name})`);
+        return existingTrader;
+      }
+
+      // Trader doesn't exist, create new one
       try {
-        trader = await prisma.trader.create({
+        const newTrader = await prisma.trader.create({
           data: {
             address: walletAddress,
             // name and imageUrl are null for new users
           },
         });
         console.log(`Created new trader: ${walletAddress}`);
+        return newTrader;
       } catch (createError: any) {
         // Handle race condition: if trader was created between findFirst and create
-        if (createError?.code === "P2002" || createError?.message?.includes("Unique constraint")) {
+        if (
+          createError?.code === "P2002" ||
+          createError?.message?.includes("Unique constraint")
+        ) {
           // Trader was created by another request, fetch it
-          trader = await prisma.trader.findFirst({
+          const concurrentTrader = await prisma.trader.findFirst({
             where: { address: walletAddress },
           });
           console.log(`Trader created concurrently, fetched: ${walletAddress}`);
-        } else {
-          throw createError;
+          return concurrentTrader;
         }
+        throw createError;
       }
-    } else {
-      console.log(`Existing trader signed in: ${walletAddress}`);
-    }
+    });
 
     return NextResponse.json({
       success: true,
@@ -122,10 +181,24 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Auth error:", error);
+
+    // If it's a database connection error, indicate it's retryable
+    if (isDbConnectionError(error)) {
+      return NextResponse.json(
+        {
+          error: "Database connection failed",
+          details: "Unable to reach database server after multiple retries",
+          retryable: true,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
       {
         error: "Authentication failed",
         details: error instanceof Error ? error.message : "Unknown error",
+        retryable: false,
       },
       { status: 500 }
     );
@@ -145,9 +218,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Use findFirst as fallback if findUnique doesn't work with address
-    const trader = await prisma.trader.findFirst({
-      where: { address: walletAddress },
+    // Use findFirst with retry logic for DB connection issues
+    const trader = await retryWithBackoff(async () => {
+      return await prisma.trader.findFirst({
+        where: { address: walletAddress },
+      });
     });
 
     if (!trader) {
@@ -165,8 +240,24 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Auth check error:", error);
+
+    // If it's a database connection error, indicate it's retryable
+    if (isDbConnectionError(error)) {
+      return NextResponse.json(
+        {
+          error: "Database connection failed",
+          details: "Unable to reach database server after multiple retries",
+          retryable: true,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Failed to check authentication" },
+      {
+        error: "Failed to check authentication",
+        retryable: false,
+      },
       { status: 500 }
     );
   }

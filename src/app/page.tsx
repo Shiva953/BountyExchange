@@ -29,8 +29,8 @@ export default function Home() {
 
       <main className="flex min-h-screen w-full max-w-5xl flex-col items-center justify-center py-32 px-8">
         <DealCarousel searchQuery={searchQuery} />
-        <TraderIndex />
         <CreateBountyButton onClick={() => setIsModalOpen(true)} />
+        <TraderIndex />
       </main>
 
       <CreateBountyModal

@@ -453,10 +453,13 @@ export default function DealPage() {
                     </span>
                   </p>
                 )}
-                <div className="flex-1 h-1 bg-[#2a2a2a] rounded-full overflow-hidden">
+                <div className="flex-1 h-2.5 bg-[#1a1a1a] rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-white rounded-full transition-all"
-                    style={{ width: `${progressPercentage}%` }}
+                    className="h-full bg-emerald-500 rounded-full transition-all"
+                    style={{
+                      width: `${progressPercentage}%`,
+                      boxShadow: '0 0 12px rgba(16, 185, 129, 0.6), 0 0 4px rgba(16, 185, 129, 0.4)'
+                    }}
                   />
                 </div>
               </div>
@@ -473,10 +476,13 @@ export default function DealPage() {
                   {currentHoldHours}
                   <span className="text-gray-500 text-lg font-normal ml-1">/{holdText}</span>
                 </p>
-                <div className="flex-1 h-1 bg-[#2a2a2a] rounded-full overflow-hidden">
+                <div className="flex-1 h-2.5 bg-[#1a1a1a] rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-white rounded-full"
-                    style={{ width: `${Math.min(holdProgressPercentage, 100)}%` }}
+                    className="h-full bg-emerald-500 rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(holdProgressPercentage, 100)}%`,
+                      boxShadow: '0 0 12px rgba(16, 185, 129, 0.6), 0 0 4px rgba(16, 185, 129, 0.4)'
+                    }}
                   />
                 </div>
               </div>

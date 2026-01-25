@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { Search, Grid3x3, ExternalLink, Zap } from "lucide-react";
+import { Search, Grid3x3, Zap } from "lucide-react";
 
 const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
 
@@ -32,14 +31,12 @@ function truncateAddress(address: string): string {
 
 interface TraderCardProps {
   trader: Trader;
-  onClick: () => void;
 }
 
-function TraderCard({ trader, onClick }: TraderCardProps) {
+function TraderCard({ trader }: TraderCardProps) {
   return (
     <div
-      className="relative rounded-2xl p-5 border border-white/10 bg-[#0a0a0a] hover:border-white/20 transition-all cursor-pointer group"
-      onClick={onClick}
+      className="relative rounded-2xl p-5 border border-white/10 bg-[#0a0a0a] hover:border-white/20 transition-all"
     >
       {/* Profile Picture */}
       <div className="relative mb-4">
@@ -73,7 +70,8 @@ function TraderCard({ trader, onClick }: TraderCardProps) {
       </p>
 
       {/* Completion Percentage - Top Right */}
-      <div className="absolute top-5 right-5">
+      <div className="absolute top-5 right-5 text-right">
+        <p className="text-zinc-500 text-xs tracking-tight mb-1">Completion %</p>
         <p className="text-white font-bold text-2xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
           {trader.completionPercentage}%
         </p>
@@ -87,10 +85,6 @@ function TraderCard({ trader, onClick }: TraderCardProps) {
         </p>
       </div>
 
-      {/* Action Icon - Bottom Right */}
-      <div className="absolute bottom-5 right-5 w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors">
-        <ExternalLink className="w-4 h-4 text-zinc-400 group-hover:text-white transition-colors" />
-      </div>
     </div>
   );
 }
@@ -128,7 +122,6 @@ function LoadingCard() {
 }
 
 export function TraderIndex() {
-  const router = useRouter();
   const [traders, setTraders] = useState<Trader[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -147,7 +140,7 @@ export function TraderIndex() {
 
           if (!response.ok) {
             const errorData = await response.json();
-            
+
             // If it's a retryable error and we haven't exhausted retries, retry
             if (errorData.retryable && attempt < maxRetries) {
               const delay = initialDelay * Math.pow(2, attempt);
@@ -155,14 +148,24 @@ export function TraderIndex() {
               await new Promise((resolve) => setTimeout(resolve, delay));
               continue;
             }
-            
+
             // If not retryable or exhausted retries, throw error
             throw new Error(errorData.error || "Failed to fetch traders");
           }
 
           const data = await response.json();
           if (data.success) {
-            setTraders(data.traders);
+            // Deduplicate traders by name (keep the first occurrence)
+            const seenNames = new Set<string>();
+            const uniqueTraders = data.traders.filter((trader: Trader) => {
+              const name = trader.name?.toLowerCase();
+              if (!name || seenNames.has(name)) {
+                return false;
+              }
+              seenNames.add(name);
+              return true;
+            });
+            setTraders(uniqueTraders);
             setLoading(false);
             return; // Success, exit retry loop
           } else {
@@ -170,7 +173,7 @@ export function TraderIndex() {
           }
         } catch (error) {
           lastError = error instanceof Error ? error : new Error("Unknown error");
-          
+
           // If it's the last attempt, stop loading and show error/empty state
           if (attempt === maxRetries) {
             console.error("Error fetching traders after retries:", lastError);
@@ -178,7 +181,7 @@ export function TraderIndex() {
             setLoading(false);
             return;
           }
-          
+
           // Wait before retrying
           const delay = initialDelay * Math.pow(2, attempt);
           console.log(`Error fetching traders, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
@@ -202,10 +205,6 @@ export function TraderIndex() {
         trader.address.toLowerCase().includes(query)
     );
   }, [traders, searchQuery]);
-
-  const handleTraderClick = (trader: Trader) => {
-    router.push(`/${trader.address}/deals`);
-  };
 
   return (
     <div className="w-full mb-12">
@@ -258,7 +257,6 @@ export function TraderIndex() {
             <TraderCard
               key={trader.id}
               trader={trader}
-              onClick={() => handleTraderClick(trader)}
             />
           ))}
         </div>

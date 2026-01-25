@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useDealsForTrader, DealWithMetadata } from "@/hooks/useDealsForTrader";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Target, ArrowUpDown, Filter } from "lucide-react";
+import { ChevronLeft, ChevronRight, Target, ArrowUpDown } from "lucide-react";
 import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 
 // Using 9 decimals for stored amounts
@@ -171,8 +171,7 @@ function LoadingCard() {
   );
 }
 
-type SortOption = "reward_desc" | "reward_asc" | "volume_desc" | "volume_asc" | "expiry_asc" | "expiry_desc";
-type VolumeFilter = "all" | "no_min" | "has_min";
+type SortOption = "reward_desc" | "reward_asc" | "volume_desc" | "volume_asc" | "expiry_asc" | "expiry_desc" | "min_buy_desc" | "min_buy_asc";
 
 interface DealCarouselProps {
   searchQuery?: string;
@@ -184,9 +183,7 @@ export function DealCarousel({ searchQuery = "" }: DealCarouselProps) {
   const { deals, loading, error } = useDealsForTrader();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [sortBy, setSortBy] = useState<SortOption>("reward_desc");
-  const [volumeFilter, setVolumeFilter] = useState<VolumeFilter>("all");
   const [showSortDropdown, setShowSortDropdown] = useState(false);
-  const [showVolumeDropdown, setShowVolumeDropdown] = useState(false);
 
   // Filter and sort deals
   const filteredDeals = useMemo(() => {
@@ -201,13 +198,6 @@ export function DealCarousel({ searchQuery = "" }: DealCarouselProps) {
         const tokenAddress = deal.token.toBase58().toLowerCase();
         return tokenName.includes(query) || tokenSymbol.includes(query) || tokenAddress.includes(query);
       });
-    }
-
-    // Volume requirement filter
-    if (volumeFilter === "no_min") {
-      result = result.filter((deal) => !deal.minBuyVolume);
-    } else if (volumeFilter === "has_min") {
-      result = result.filter((deal) => deal.minBuyVolume);
     }
 
     // Sort
@@ -225,13 +215,17 @@ export function DealCarousel({ searchQuery = "" }: DealCarouselProps) {
           return a.expirationWindowInHours.toNumber() - b.expirationWindowInHours.toNumber();
         case "expiry_desc":
           return b.expirationWindowInHours.toNumber() - a.expirationWindowInHours.toNumber();
+        case "min_buy_desc":
+          return (b.minBuyVolume?.toNumber() ?? 0) - (a.minBuyVolume?.toNumber() ?? 0);
+        case "min_buy_asc":
+          return (a.minBuyVolume?.toNumber() ?? 0) - (b.minBuyVolume?.toNumber() ?? 0);
         default:
           return 0;
       }
     });
 
     return result;
-  }, [deals, searchQuery, sortBy, volumeFilter]);
+  }, [deals, searchQuery, sortBy]);
 
   const sortLabels: Record<SortOption, string> = {
     reward_desc: "Reward: High to Low",
@@ -240,12 +234,8 @@ export function DealCarousel({ searchQuery = "" }: DealCarouselProps) {
     volume_asc: "Volume: Low to High",
     expiry_asc: "Expiry: Soonest",
     expiry_desc: "Expiry: Latest",
-  };
-
-  const volumeFilterLabels: Record<VolumeFilter, string> = {
-    all: "All Bounties",
-    no_min: "No Min Buy Size",
-    has_min: "Has Min Buy Size",
+    min_buy_desc: "Min Buy: High to Low",
+    min_buy_asc: "Min Buy: Low to High",
   };
 
   const handleCardClick = (deal: DealWithMetadata) => {
@@ -280,75 +270,35 @@ export function DealCarousel({ searchQuery = "" }: DealCarouselProps) {
           </h2>
         </div>
 
-        {/* Filter Controls */}
-        <div className="flex items-center gap-2">
-          {/* Sort Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowSortDropdown(!showSortDropdown);
-                setShowVolumeDropdown(false);
-              }}
-              className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-zinc-800 rounded-full text-xs text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
-            >
-              <ArrowUpDown className="w-3 h-3" />
-              {sortLabels[sortBy].split(":")[0]}
-            </button>
-            {showSortDropdown && (
-              <div className="absolute right-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-20 min-w-[180px]">
-                {(Object.keys(sortLabels) as SortOption[]).map((option) => (
-                  <button
-                    key={option}
-                    onClick={() => {
-                      setSortBy(option);
-                      setShowSortDropdown(false);
-                    }}
-                    className={`w-full px-4 py-2.5 text-xs text-left tracking-tight transition-colors cursor-pointer ${
-                      sortBy === option
-                        ? "bg-white/10 text-white"
-                        : "text-zinc-400 hover:bg-white/5 hover:text-white"
-                    }`}
-                  >
-                    {sortLabels[option]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Volume Filter Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowVolumeDropdown(!showVolumeDropdown);
-                setShowSortDropdown(false);
-              }}
-              className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-zinc-800 rounded-full text-xs text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
-            >
-              <Filter className="w-3 h-3" />
-              {volumeFilter === "all" ? "Min Buy" : volumeFilterLabels[volumeFilter].replace("Has ", "").replace("No ", "")}
-            </button>
-            {showVolumeDropdown && (
-              <div className="absolute right-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-20 min-w-[160px]">
-                {(Object.keys(volumeFilterLabels) as VolumeFilter[]).map((option) => (
-                  <button
-                    key={option}
-                    onClick={() => {
-                      setVolumeFilter(option);
-                      setShowVolumeDropdown(false);
-                    }}
-                    className={`w-full px-4 py-2.5 text-xs text-left tracking-tight transition-colors cursor-pointer ${
-                      volumeFilter === option
-                        ? "bg-white/10 text-white"
-                        : "text-zinc-400 hover:bg-white/5 hover:text-white"
-                    }`}
-                  >
-                    {volumeFilterLabels[option]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Sort Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowSortDropdown(!showSortDropdown)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-zinc-800 rounded-full text-xs text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer tracking-tight"
+          >
+            <ArrowUpDown className="w-3 h-3" />
+            {sortLabels[sortBy].split(":")[0]}
+          </button>
+          {showSortDropdown && (
+            <div className="absolute right-0 top-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden z-20 min-w-[180px]">
+              {(Object.keys(sortLabels) as SortOption[]).map((option) => (
+                <button
+                  key={option}
+                  onClick={() => {
+                    setSortBy(option);
+                    setShowSortDropdown(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-xs text-left tracking-tight transition-colors cursor-pointer ${
+                    sortBy === option
+                      ? "bg-white/10 text-white"
+                      : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  {sortLabels[option]}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
