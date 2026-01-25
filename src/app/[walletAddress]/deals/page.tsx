@@ -56,10 +56,11 @@ interface ProfileCardProps {
   traderImageUrl: string | null;
   activeBounties: number;
   volumeCompleted: number;
+  volumeLoading: boolean;
   isOwnProfile: boolean;
 }
 
-function ProfileCard({ walletAddress, traderName, traderImageUrl, activeBounties, volumeCompleted, isOwnProfile }: ProfileCardProps) {
+function ProfileCard({ walletAddress, traderName, traderImageUrl, activeBounties, volumeCompleted, volumeLoading, isOwnProfile }: ProfileCardProps) {
   const [imageError, setImageError] = useState(false);
 
   // Use trader's image if available, otherwise fallback to generated avatar
@@ -145,7 +146,11 @@ function ProfileCard({ walletAddress, traderName, traderImageUrl, activeBounties
             </div>
             <div>
               <p className="text-zinc-500 text-xs tracking-tight">Volume Completed</p>
-              <p className="text-white font-bold text-xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatVolumeUSD(volumeCompleted)}</p>
+              {volumeLoading ? (
+                <div className="h-7 w-20 bg-zinc-800 rounded animate-pulse" />
+              ) : (
+                <p className="text-white font-bold text-xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{formatVolumeUSD(volumeCompleted)}</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -648,6 +653,7 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
           traderImageUrl={traderData.imageUrl}
           activeBounties={activeDeals.length}
           volumeCompleted={totalVolumeCompleted}
+          volumeLoading={loading || loadingKeys.size > 0}
           isOwnProfile={isOwnProfile}
         />
 

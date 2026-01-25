@@ -256,13 +256,6 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
   const isButtonDisabled =
     !isFormValid || !connected || ["building", "signing", "confirming"].includes(txStatus);
 
-  const holdRatio =
-    formData.holdDuration && formData.expirationWindow
-      ? Math.round(
-          (parseFloat(formData.holdDuration) / parseFloat(formData.expirationWindow)) * 100
-        )
-      : "";
-
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
@@ -454,10 +447,6 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                       onChange={(e) => handleInputChange("holdDuration", e.target.value)}
                       className="rounded-none"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="holdRatio" className="tracking-tight font-sans">Hold Ratio (%)</Label>
-                    <Input id="holdRatio" value={holdRatio} placeholder="—" readOnly className="rounded-none" />
                   </div>
                 </div>
               </CardContent>

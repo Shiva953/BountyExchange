@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction } from "@solana/web3.js";
 import { getProgram } from "@/program/instructions/createDeal";
-import { ArrowLeft, Clock, Target, Calendar, TrendingUp, Check, Loader2, ArrowUpRight, RefreshCw } from "lucide-react";
+import { ArrowLeft, Clock, Target, Calendar, Check, Loader2, ArrowUpRight, RefreshCw } from "lucide-react";
 import { useVolumeProgress } from "@/hooks/useVolumeProgress";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -376,7 +376,7 @@ export default function DealPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className={`grid gap-4 mb-10 ${deal.minBuyVolume ? "grid-cols-5" : "grid-cols-4"}`}>
+        <div className={`grid gap-4 mb-10 w-full ${deal.minBuyVolume ? "grid-cols-5" : "grid-cols-4"}`}>
           <div className="bg-[#111] rounded-xl p-4 border border-white/10">
             <div className="flex items-center gap-2 text-gray-500 text-xs tracking-tight mb-2">
               <Target className="w-3 h-3" />
@@ -399,13 +399,6 @@ export default function DealPage() {
               Hold Duration
             </div>
             <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{holdText}</p>
-          </div>
-          <div className="bg-[#111] rounded-xl p-4 border border-white/10">
-            <div className="flex items-center gap-2 text-gray-500 text-xs tracking-tight mb-2">
-              <TrendingUp className="w-3 h-3" />
-              Hold Ratio
-            </div>
-            <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>80%</p>
           </div>
           <div className="bg-[#111] rounded-xl p-4 border border-white/10">
             <div className="flex items-center gap-2 text-gray-500 text-xs tracking-tight mb-2">
