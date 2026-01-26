@@ -30,9 +30,6 @@ export async function POST(request: NextRequest) {
   try {
     const body: CreateDealRequestBody = await request.json();
 
-    console.log("=== API: Create Deal Request ===");
-    console.log("Request body:", JSON.stringify(body, null, 2));
-
     const requiredFields: (keyof CreateDealRequestBody)[] = [
       "payer",
       "token",
@@ -45,7 +42,6 @@ export async function POST(request: NextRequest) {
 
     for (const field of requiredFields) {
       if (!body[field]) {
-        console.error(`Missing required field: ${field}`);
         return NextResponse.json(
           { error: `Missing required field: ${field}` },
           { status: 400 }
@@ -61,8 +57,7 @@ export async function POST(request: NextRequest) {
       payerPubkey = new PublicKey(body.payer);
       tokenPubkey = new PublicKey(body.token);
       traderPubkey = new PublicKey(body.trader);
-    } catch (e) {
-      console.error("Invalid public key:", e);
+    } catch {
       return NextResponse.json(
         { error: "Invalid public key format" },
         { status: 400 }
@@ -70,8 +65,6 @@ export async function POST(request: NextRequest) {
     }
 
     const dealId = generateDealId();
-
-    // USDC has 6 decimals on Solana
     const USDC_DECIMALS = 9;
     const rewardAmountRaw = parseFloat(body.rewardAmount);
     const targetVolumeRaw = parseFloat(body.targetVolume);
@@ -88,7 +81,6 @@ export async function POST(request: NextRequest) {
     const expirationWindowInHours = new BN(body.expirationWindowInHours);
     const holdDurationInHours = new BN(body.holdDurationInHours);
 
-    // Parse optional minBuyVolume
     let minBuyVolume: BN | null = null;
     if (body.minBuyVolume) {
       const minBuyVolumeRaw = parseFloat(body.minBuyVolume);
@@ -122,9 +114,6 @@ export async function POST(request: NextRequest) {
     const { blockhash, lastValidBlockHeight } =
       await connection.getLatestBlockhash("confirmed");
 
-    console.log("Blockhash:", blockhash);
-    console.log("Last valid block height:", lastValidBlockHeight);
-
     const transaction = new Transaction();
     transaction.add(instruction);
     transaction.recentBlockhash = blockhash;
@@ -137,8 +126,7 @@ export async function POST(request: NextRequest) {
       })
       .toString("base64");
 
-    console.log("Transaction serialized successfully");
-    console.log("Serialized length:", serializedTransaction.length);
+    // Deal syncs to DB when trader accepts via /api/confirmDealAccepted
 
     return NextResponse.json({
       success: true,
@@ -150,8 +138,7 @@ export async function POST(request: NextRequest) {
       lastValidBlockHeight,
     });
   } catch (error) {
-    console.error("=== API Error ===");
-    console.error(error);
+    console.error("Error creating deal:", error);
     return NextResponse.json(
       {
         error: "Failed to build transaction",

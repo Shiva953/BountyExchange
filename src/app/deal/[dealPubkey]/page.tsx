@@ -218,6 +218,27 @@ export default function DealPage() {
 
       await connection.confirmTransaction(signature, "confirmed");
 
+      // Sync the accepted deal to the database
+      try {
+        const syncResponse = await fetch("/api/confirmDealAccepted", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dealPubkey: deal.publicKey.toBase58(),
+            signature,
+          }),
+        });
+        const syncData = await syncResponse.json();
+        if (!syncResponse.ok) {
+          console.error("Failed to sync deal to database:", syncData);
+        } else {
+          console.log("Deal synced to database:", syncData);
+        }
+      } catch (syncError) {
+        console.error("Failed to sync deal to database:", syncError);
+        // Don't fail the whole operation if sync fails - cron will pick it up
+      }
+
       setButtonState("success");
 
       toast.success(

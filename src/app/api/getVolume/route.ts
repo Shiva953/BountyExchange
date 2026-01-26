@@ -5,8 +5,6 @@ import {
 } from "@/utils/calculateTokenVolume";
 
 export async function GET(request: NextRequest) {
-  console.log("\n[API] GET /api/getVolume");
-
   try {
     const { searchParams } = new URL(request.url);
 
@@ -16,7 +14,6 @@ export async function GET(request: NextRequest) {
     const maxTxns = parseInt(searchParams.get("maxTxns") || "500", 10);
 
     if (!walletAddress) {
-      console.log("[API] Error: Missing wallet parameter");
       return NextResponse.json(
         { error: "Missing required parameter: wallet" },
         { status: 400 }
@@ -24,7 +21,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (!tokenMint) {
-      console.log("[API] Error: Missing token parameter");
       return NextResponse.json(
         { error: "Missing required parameter: token" },
         { status: 400 }
@@ -32,7 +28,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (walletAddress.length < 32 || walletAddress.length > 44) {
-      console.log("[API] Error: Invalid wallet address format");
       return NextResponse.json(
         { error: "Invalid wallet address format" },
         { status: 400 }
@@ -40,17 +35,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (tokenMint.length < 32 || tokenMint.length > 44) {
-      console.log("[API] Error: Invalid token mint format");
       return NextResponse.json(
         { error: "Invalid token mint format" },
         { status: 400 }
       );
     }
-
-    console.log(`[API] Wallet: ${walletAddress}`);
-    console.log(`[API] Token: ${tokenMint}`);
-    console.log(`[API] Method: ${useFast ? "fast" : "standard"}`);
-    console.log(`[API] Max Transactions: ${maxTxns}`);
 
     const startTime = Date.now();
 
@@ -59,15 +48,10 @@ export async function GET(request: NextRequest) {
       : await calculateTokenVolume(walletAddress, tokenMint, maxTxns);
 
     const duration = Date.now() - startTime;
-    console.log(`[API] Calculation completed in ${duration}ms`);
 
     if (!result.success) {
-      console.log(`[API] Error: ${result.error}`);
       return NextResponse.json(
-        {
-          success: false,
-          error: result.error,
-        },
+        { success: false, error: result.error },
         { status: 500 }
       );
     }
@@ -95,7 +79,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[API] Unhandled error:", error);
+    console.error("Error in getVolume:", error);
     return NextResponse.json(
       {
         success: false,
@@ -107,8 +91,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  console.log("\n[API] POST /api/getVolume");
-
   try {
     const body = await request.json();
 
@@ -123,7 +105,6 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!walletAddress) {
-      console.log("[API] Error: Missing wallet in body");
       return NextResponse.json(
         { error: "Missing required field: wallet" },
         { status: 400 }
@@ -131,7 +112,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (!tokenMint) {
-      console.log("[API] Error: Missing token in body");
       return NextResponse.json(
         { error: "Missing required field: token" },
         { status: 400 }
@@ -142,15 +122,6 @@ export async function POST(request: NextRequest) {
     const filterEndTime = endTimeParam ? Number(endTimeParam) : undefined;
     const minBuyVolumeUSD = minBuyVolumeParam ? Number(minBuyVolumeParam) : undefined;
 
-    console.log(`[API] Wallet: ${walletAddress}`);
-    console.log(`[API] Token: ${tokenMint}`);
-    console.log(`[API] Method: ${fast ? "fast" : "standard"}`);
-    console.log(`[API] Max Transactions: ${maxTxns}`);
-    console.log(`[API] Time Range: ${filterStartTime ? new Date(filterStartTime * 1000).toISOString() : 'beginning'} to ${filterEndTime ? new Date(filterEndTime * 1000).toISOString() : 'now'}`);
-    if (minBuyVolumeUSD) {
-      console.log(`[API] Min Buy Volume: $${minBuyVolumeUSD} USD`);
-    }
-
     const apiStartTime = Date.now();
 
     const result = fast
@@ -158,15 +129,10 @@ export async function POST(request: NextRequest) {
       : await calculateTokenVolume(walletAddress, tokenMint, maxTxns, filterStartTime, filterEndTime, minBuyVolumeUSD);
 
     const duration = Date.now() - apiStartTime;
-    console.log(`[API] Calculation completed in ${duration}ms`);
 
     if (!result.success) {
-      console.log(`[API] Error: ${result.error}`);
       return NextResponse.json(
-        {
-          success: false,
-          error: result.error,
-        },
+        { success: false, error: result.error },
         { status: 500 }
       );
     }
@@ -201,7 +167,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[API] Unhandled error:", error);
+    console.error("Error in getVolume POST:", error);
     return NextResponse.json(
       {
         success: false,

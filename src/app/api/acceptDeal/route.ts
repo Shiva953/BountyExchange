@@ -15,9 +15,6 @@ export async function POST(request: NextRequest) {
   try {
     const body: AcceptDealRequestBody = await request.json();
 
-    console.log("=== API: Accept Deal Request ===");
-    console.log("Request body:", JSON.stringify(body, null, 2));
-
     if (!body.trader || !body.dealPubkey) {
       return NextResponse.json(
         { error: "Missing required fields: trader and dealPubkey" },
@@ -40,8 +37,6 @@ export async function POST(request: NextRequest) {
 
     const connection = new Connection(process.env.HELIUS_RPC_URL!, "confirmed");
     const program = getProgram(connection);
-
-    // Verify the deal exists and is valid
     const dealAccount = await program.account.deal.fetch(dealPubkey);
 
     if (!dealAccount.isActive) {
@@ -58,7 +53,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify the trader is the intended trader
     if (!dealAccount.trader.equals(traderPubkey)) {
       return NextResponse.json(
         { error: "You are not the intended trader for this deal" },
@@ -66,7 +60,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build the accept_deal instruction
     const { instruction } = await buildAcceptDealInstruction(
       connection,
       traderPubkey,
@@ -90,7 +83,7 @@ export async function POST(request: NextRequest) {
       })
       .toString("base64");
 
-    console.log("Accept deal transaction built successfully");
+    // Frontend calls /api/confirmDealAccepted after tx confirms to sync to DB
 
     return NextResponse.json({
       success: true,
@@ -100,8 +93,7 @@ export async function POST(request: NextRequest) {
       lastValidBlockHeight,
     });
   } catch (error) {
-    console.error("=== API Error ===");
-    console.error(error);
+    console.error("Error accepting deal:", error);
     return NextResponse.json(
       {
         error: "Failed to build transaction",

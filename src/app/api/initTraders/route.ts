@@ -4,12 +4,9 @@ import { KOLScanScraper } from "@/utils/tradersScrapedData";
 
 export async function POST() {
   try {
-    console.log("=== API: Init Traders - Starting scrape ===");
-
     const scraper = new KOLScanScraper();
     const results = await scraper.scrapeKOLScan();
 
-    // Collect all unique traders from all periods
     const tradersMap = new Map<
       string,
       { name: string; address: string; imageUrl: string | null }
@@ -17,7 +14,6 @@ export async function POST() {
 
     for (const result of results) {
       for (const trader of result.traders) {
-        // Use walletAddress as the unique key to avoid duplicates
         if (!tradersMap.has(trader.walletAddress)) {
           tradersMap.set(trader.walletAddress, {
             name: trader.walletName || trader.accountName || "Unknown",
@@ -29,9 +25,6 @@ export async function POST() {
     }
 
     const tradersToInsert = Array.from(tradersMap.values());
-    console.log(`Found ${tradersToInsert.length} unique traders to insert`);
-
-    // Upsert traders to avoid duplicates if run multiple times
     let inserted = 0;
     let updated = 0;
 
@@ -63,19 +56,15 @@ export async function POST() {
 
     await scraper.cleanup();
 
-    console.log(`=== API: Init Traders Complete ===`);
-    console.log(`Inserted: ${inserted}, Updated: ${updated}`);
-
     return NextResponse.json({
       success: true,
       message: `Initialized ${tradersToInsert.length} traders`,
       inserted,
       updated,
-      traders: tradersToInsert.slice(0, 10), // Return first 10 as sample
+      traders: tradersToInsert.slice(0, 10),
     });
   } catch (error) {
-    console.error("=== API Error ===");
-    console.error(error);
+    console.error("Error initializing traders:", error);
     return NextResponse.json(
       {
         error: "Failed to initialize traders",

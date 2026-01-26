@@ -6,7 +6,6 @@ import bs58 from "bs58";
 
 const SIGN_MESSAGE = "Sign in to Bounty Exchange";
 
-// Helper function to check if error is a database connection error
 function isDbConnectionError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message;
@@ -20,7 +19,6 @@ function isDbConnectionError(error: unknown): boolean {
   );
 }
 
-// Retry function with exponential backoff
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries: number = 5,

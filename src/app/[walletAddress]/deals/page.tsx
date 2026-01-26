@@ -4,7 +4,7 @@ import { use, useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useAcceptedDeals } from "@/hooks/useAcceptedDeals";
+import { useTraderDeals } from "@/hooks/useTraderDeals";
 import { useDealsForTrader, DealWithMetadata } from "@/hooks/useDealsForTrader";
 import { Clock, TrendingUp, Zap, Search, ArrowUpDown, Loader2 } from "lucide-react";
 import { useBatchVolumeProgress } from "@/hooks/useBatchVolumeProgress";
@@ -490,20 +490,54 @@ function LoadingCard() {
   );
 }
 
+function ProfileCardSkeleton() {
+  return (
+    <div
+      className="w-full rounded-2xl p-6 border border-white/10 mb-8 animate-pulse"
+      style={{ background: "#0a0a0a" }}
+    >
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        {/* Left: Avatar and wallet info skeleton */}
+        <div className="flex items-center gap-4">
+          <div className="w-20 h-20 rounded-full bg-zinc-800" />
+          <div className="flex flex-col gap-2">
+            <div className="h-6 w-32 bg-zinc-800 rounded" />
+            <div className="h-4 w-24 bg-zinc-800 rounded" />
+          </div>
+        </div>
+
+        {/* Right: Stats skeleton */}
+        <div className="flex gap-8">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-zinc-800" />
+            <div>
+              <div className="h-3 w-24 bg-zinc-800 rounded mb-2" />
+              <div className="h-6 w-16 bg-zinc-800 rounded" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-zinc-800" />
+            <div>
+              <div className="h-3 w-24 bg-zinc-800 rounded mb-2" />
+              <div className="h-6 w-8 bg-zinc-800 rounded" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MyDealsPage({ params }: MyDealsPageProps) {
   const { walletAddress } = use(params);
   const router = useRouter();
   const { publicKey, connected } = useWallet();
-  const { deals, loading, error } = useAcceptedDeals(walletAddress);
+  const { deals, traderData, loading, error } = useTraderDeals(walletAddress);
   const { deals: availableDeals, loading: availableLoading } = useDealsForTrader();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
   const [searchQuery, setSearchQuery] = useState("");
   const [rewardFilter, setRewardFilter] = useState<RewardFilter>("all");
   const [sortBy, setSortBy] = useState<SortOption>("reward_desc");
-  const [traderData, setTraderData] = useState<{ name: string | null; imageUrl: string | null }>({
-    name: null,
-    imageUrl: null,
-  });
 
   const isOwnProfile = publicKey?.toBase58() === walletAddress;
 
@@ -521,27 +555,6 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
       router.push("/");
     }
   }, [connected, router]);
-
-  // Fetch trader data from the database
-  useEffect(() => {
-    async function fetchTraderData() {
-      try {
-        const response = await fetch(`/api/auth/signin?address=${walletAddress}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.exists && data.trader) {
-            setTraderData({
-              name: data.trader.name,
-              imageUrl: data.trader.imageUrl,
-            });
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch trader data:", err);
-      }
-    }
-    fetchTraderData();
-  }, [walletAddress]);
 
   // Filter deals based on active/completed status, search, and reward filter
   const { activeDeals, completedDeals } = useMemo(() => {
@@ -647,15 +660,19 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
     <main className="min-h-screen pt-24 px-6 bg-black pl-28">
       <div className="max-w-6xl mt-6 mx-auto">
         {/* Profile Card */}
-        <ProfileCard
-          walletAddress={walletAddress}
-          traderName={traderData.name}
-          traderImageUrl={traderData.imageUrl}
-          activeBounties={activeDeals.length}
-          volumeCompleted={totalVolumeCompleted}
-          volumeLoading={loading || loadingKeys.size > 0}
-          isOwnProfile={isOwnProfile}
-        />
+        {loading ? (
+          <ProfileCardSkeleton />
+        ) : (
+          <ProfileCard
+            walletAddress={walletAddress}
+            traderName={traderData?.name ?? null}
+            traderImageUrl={traderData?.imageUrl ?? null}
+            activeBounties={activeDeals.length}
+            volumeCompleted={totalVolumeCompleted}
+            volumeLoading={loadingKeys.size > 0}
+            isOwnProfile={isOwnProfile}
+          />
+        )}
 
         {/* Available Bounties Section - Only for own profile */}
         {isOwnProfile && (

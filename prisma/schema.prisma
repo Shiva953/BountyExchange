@@ -15,4 +15,35 @@ model trader {
   volumeCompleted Decimal? @db.Decimal
   activeBounties  Int?
   createdAt       DateTime @default(now())
+  deals           deal[]   @relation("TraderDeals")
+}
+
+model deal {
+  id                    Int       @id @default(autoincrement())
+  publicKey             String    @unique // On-chain deal PDA
+  dealId                String    // On-chain deal ID (stored as string for BigInt)
+  creator               String    // Creator wallet address
+  token                 String    // Token mint address
+  traderId              Int
+  trader                trader    @relation("TraderDeals", fields: [traderId], references: [id])
+  traderAddress         String    // Trader wallet address (denormalized for quick queries)
+  rewardAmount          Decimal   @db.Decimal // In raw units (with decimals)
+  targetVolume          Decimal   @db.Decimal // In raw units
+  minBuyVolume          Decimal?  @db.Decimal // Optional min buy volume
+  expirationHours       Int
+  holdDurationHours     Int
+  escrowVault           String
+  createdAt             DateTime  // On-chain creation timestamp
+  expiresAt             DateTime? // Calculated: acceptedAt + expirationHours (null until accepted)
+  acceptedAt            DateTime? // When trader accepted the deal
+  finalizedAt           DateTime? // When deal was finalized
+  isActive              Boolean   @default(true)
+  isAccepted            Boolean   @default(false)
+  volumeCompleted       Decimal?  @db.Decimal // Tracked volume progress (updated by cron)
+  outcome               String?   // "won" | "lost" | null (set on finalization)
+
+  @@index([traderAddress])
+  @@index([traderId])
+  @@index([expiresAt])
+  @@index([isActive, isAccepted])
 }

@@ -27,18 +27,11 @@ export async function GET(request: NextRequest) {
     const connection = new Connection(process.env.HELIUS_RPC_URL!, "confirmed");
     const program = getProgram(connection);
 
-    // Fetch all deals where the trader field matches the wallet address
-    // The trader field is at offset 80 in the Deal account structure
+    // Trader field offset in Deal account
     const allDeals = await program.account.deal.all([
-      {
-        memcmp: {
-          offset: 80,
-          bytes: walletPubkey.toBase58(),
-        },
-      },
+      { memcmp: { offset: 80, bytes: walletPubkey.toBase58() } },
     ]);
 
-    // Filter for accepted deals only
     const acceptedDeals = allDeals
       .filter((deal) => deal.account.isAccepted)
       .map((deal) => ({

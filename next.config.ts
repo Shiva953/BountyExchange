@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Instrumentation is automatically enabled in Next.js 14+
+  // The src/instrumentation.ts file will run on server startup
 };
 
 export default nextConfig;

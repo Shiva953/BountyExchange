@@ -7,7 +7,7 @@ interface VolumeRequest {
   startTime?: number;
   endTime?: number;
   minBuyVolume?: number;
-  key: string; // unique identifier for this request
+  key: string;
 }
 
 interface VolumeResult {
@@ -25,12 +25,10 @@ interface VolumeResult {
   error?: string;
 }
 
-const MAX_CONCURRENT = 3; // Process max 3 requests concurrently to avoid rate limits
+const MAX_CONCURRENT = 3;
 const DELAY_BETWEEN_BATCHES_MS = 100;
 
 export async function POST(request: NextRequest) {
-  console.log("\n[API] POST /api/getVolumeBatch");
-
   try {
     const body = await request.json();
     const { requests } = body as { requests: VolumeRequest[] };
@@ -43,10 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (requests.length === 0) {
-      return NextResponse.json({
-        success: true,
-        results: [],
-      });
+      return NextResponse.json({ success: true, results: [] });
     }
 
     if (requests.length > 20) {
@@ -56,12 +51,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[API] Processing ${requests.length} volume requests`);
-
     const apiStartTime = Date.now();
     const results: VolumeResult[] = [];
 
-    // Process in batches to avoid rate limiting
     const batches: VolumeRequest[][] = [];
     for (let i = 0; i < requests.length; i += MAX_CONCURRENT) {
       batches.push(requests.slice(i, i + MAX_CONCURRENT));
@@ -83,11 +75,7 @@ export async function POST(request: NextRequest) {
           );
 
           if (!result.success) {
-            return {
-              key: req.key,
-              success: false,
-              error: result.error,
-            };
+            return { key: req.key, success: false, error: result.error };
           }
 
           return {
@@ -104,7 +92,6 @@ export async function POST(request: NextRequest) {
             },
           };
         } catch (err) {
-          console.error(`[API] Error processing ${req.key}:`, err);
           return {
             key: req.key,
             success: false,
@@ -116,14 +103,12 @@ export async function POST(request: NextRequest) {
       const batchResults = await Promise.all(batchPromises);
       results.push(...batchResults);
 
-      // Small delay between batches to avoid rate limiting
       if (batches.indexOf(batch) < batches.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES_MS));
       }
     }
 
     const duration = Date.now() - apiStartTime;
-    console.log(`[API] Batch completed in ${duration}ms - ${results.filter(r => r.success).length}/${results.length} successful`);
 
     return NextResponse.json({
       success: true,
@@ -136,7 +121,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[API] Unhandled error:", error);
+    console.error("Error in getVolumeBatch:", error);
     return NextResponse.json(
       {
         success: false,
