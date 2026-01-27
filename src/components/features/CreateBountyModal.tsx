@@ -53,7 +53,6 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
   const { connection } = useConnection();
 
   const [txStatus, setTxStatus] = useState<TransactionStatus>("idle");
-  const [txError, setTxError] = useState<string | null>(null);
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [formData, setFormData] = useState<BountyFormData>({
     contractAddress: "",
@@ -127,12 +126,11 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
 
   const handleCreateBounty = useCallback(async () => {
     if (!publicKey || !signTransaction || !isFormValid) {
-      setTxError("Please connect your wallet first");
+      toast.error("Please connect your wallet first");
       return;
     }
 
     setTxStatus("building");
-    setTxError(null);
     setTxSignature(null);
 
     try {
@@ -182,6 +180,13 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
         throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
       }
 
+      // Confirm creator in DB (fire-and-forget, don't block success)
+      fetch("/api/confirmDealCreated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creatorAddress: publicKey.toBase58() }),
+      }).catch((err) => console.error("Failed to confirm creator:", err));
+
       setTxStatus("success");
       setTxSignature(signature);
 
@@ -220,17 +225,14 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       // Check for RewardBelowMinimum error (code 6001)
       if (errorMessage.includes("6001") || errorMessage.includes("RewardBelowMinimum") || errorMessage.includes("Minimum reward amount")) {
         toast.error("Minimum reward amount is 200 USDC");
-        setTxError("Minimum reward amount is 200 USDC");
       // Check for SelfTargetedDeal error (code 6005)
       } else if (errorMessage.includes("6005") || errorMessage.includes("SelfTargetedDeal") || errorMessage.includes("targeting yourself")) {
         toast.error("Cannot create a bounty targeting yourself");
-        setTxError("Cannot create a bounty targeting yourself");
       // Check for MinBuyVolumeExceedsTarget error (code 6012)
       } else if (errorMessage.includes("6012") || errorMessage.includes("MinBuyVolumeExceedsTarget") || errorMessage.includes("Minimum buy volume must be less than")) {
         toast.error("Min buy size must be less than target volume");
-        setTxError("Min buy size must be less than target volume");
       } else {
-        setTxError(errorMessage);
+        toast.error(errorMessage);
       }
     }
   }, [publicKey, signTransaction, isFormValid, formData, connection, onClose]);
@@ -500,12 +502,6 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                   {txStatus === "success" && <CheckCircle2 className="mr-2 size-4" />}
                   {getButtonText()}
                 </Button>
-
-                {txError && (
-                  <p className="text-sm text-destructive tracking-tight" role="alert">
-                    {txError}
-                  </p>
-                )}
 
                 {txSignature && txStatus === "success" && (
                   <Button

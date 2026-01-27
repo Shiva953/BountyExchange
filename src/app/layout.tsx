@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SolanaProvider } from "@/components/providers/SolanaProvider";
-import { AuthProvider } from "@/components/providers/AuthProvider";
 import { WalletGate } from "@/components/providers/WalletGate";
 import { Navbar } from "@/components/layout/Navbar";
 import { Toaster } from "sonner";
@@ -33,11 +32,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <SolanaProvider>
-          <AuthProvider>
-            <Navbar />
-            <WalletGate>{children}</WalletGate>
-            <Toaster theme="dark" position="bottom-right" />
-          </AuthProvider>
+          <Navbar />
+          <WalletGate>{children}</WalletGate>
+          <Toaster theme="dark" position="bottom-right" />
         </SolanaProvider>
       </body>
     </html>

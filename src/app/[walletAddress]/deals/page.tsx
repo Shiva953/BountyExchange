@@ -331,6 +331,10 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
   const tokenSymbol = deal.tokenMetadata?.symbol || "???";
   const tokenImage = deal.tokenMetadata?.image || "";
 
+  // Get outcome from deal for completed deals
+  const outcome = deal.outcome;
+  const isPassed = outcome === "won";
+  const isFailed = outcome === "lost";
 
   useEffect(() => {
     getMarketCap(deal.token.toBase58()).then(setMarketCap);
@@ -340,16 +344,55 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
 
   // Calculate progress from real volume data
   const targetVolumeUSD = Number(deal.targetVolume) / 10 ** USDC_DECIMALS;
-  const progress = isCompleted ? 100 : Math.min(100, (volumeUSD / targetVolumeUSD) * 100);
-  const progressAmount = isCompleted ? targetVolumeUSD : volumeUSD;
+  // For completed deals, use the stored volumeCompleted if available
+  const actualVolumeUSD = isCompleted && deal.volumeCompleted !== undefined
+    ? deal.volumeCompleted
+    : volumeUSD;
+  const progress = isCompleted
+    ? (isPassed ? 100 : Math.min(100, (actualVolumeUSD / targetVolumeUSD) * 100))
+    : Math.min(100, (volumeUSD / targetVolumeUSD) * 100);
+  const progressAmount = isCompleted ? actualVolumeUSD : volumeUSD;
+
+  // Determine status styling based on outcome
+  const getStatusDisplay = () => {
+    if (!isCompleted) {
+      return { text: "Live", className: "text-[#f5a0ac]" };
+    }
+    if (isPassed) {
+      return { text: "PASS", className: "text-green-400" };
+    }
+    if (isFailed) {
+      return { text: "FAIL", className: "text-red-400" };
+    }
+    return { text: "Completed", className: "text-zinc-400" };
+  };
+
+  const statusDisplay = getStatusDisplay();
+
+  // Get progress bar color based on outcome
+  const getProgressBarColor = () => {
+    if (!isCompleted) return "bg-[#f5a0ac]";
+    if (isPassed) return "bg-green-500";
+    if (isFailed) return "bg-red-500";
+    return "bg-zinc-500";
+  };
 
   return (
     <Link
       href={`/deal/${deal.publicKey.toBase58()}`}
-      className="block bg-black rounded-2xl p-5 border border-white/10 hover:border-white/20 transition-colors cursor-pointer"
+      className={`block bg-black rounded-2xl p-5 border transition-colors cursor-pointer ${
+        isCompleted && isFailed
+          ? "border-red-500/30 hover:border-red-500/50"
+          : isCompleted && isPassed
+          ? "border-green-500/30 hover:border-green-500/50"
+          : "border-white/10 hover:border-white/20"
+      }`}
       style={{
-        background:
-          "radial-gradient(ellipse 150% 150% at top center, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 40%, black 80%)",
+        background: isCompleted && isFailed
+          ? "radial-gradient(ellipse 150% 150% at top center, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 40%, black 80%)"
+          : isCompleted && isPassed
+          ? "radial-gradient(ellipse 150% 150% at top center, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.02) 40%, black 80%)"
+          : "radial-gradient(ellipse 150% 150% at top center, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 40%, black 80%)",
       }}
     >
       {/* Header: Token info and Reward */}
@@ -368,6 +411,22 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
                 onError={() => setImageError(true)}
               />
             )}
+            {/* Outcome badge on avatar */}
+            {isCompleted && (isPassed || isFailed) && (
+              <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-2 border-black flex items-center justify-center ${
+                isPassed ? "bg-green-500" : "bg-red-500"
+              }`}>
+                {isPassed ? (
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <h3 className="text-white font-semibold text-lg tracking-tight">{tokenName}</h3>
@@ -380,7 +439,9 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
         </div>
         <div className="text-right">
           <p className="text-zinc-500 text-xs tracking-tight mb-1">Reward</p>
-          <p className="text-[#f5a0ac] font-bold text-2xl" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em", textShadow: "0 0 20px rgba(245, 160, 172, 0.4)" }}>
+          <p className={`font-bold text-2xl ${
+            isCompleted && isPassed ? "text-green-400" : "text-[#f5a0ac]"
+          }`} style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em", textShadow: isCompleted && isPassed ? "0 0 20px rgba(34, 197, 94, 0.4)" : "0 0 20px rgba(245, 160, 172, 0.4)" }}>
             {formatUSDC(deal.rewardAmount.toNumber())}
           </p>
         </div>
@@ -404,8 +465,8 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
         )}
         <div className="bg-white/5 rounded-xl p-3">
           <p className="text-zinc-500 text-xs tracking-tight mb-1">Status</p>
-          <p className={`font-semibold text-lg tracking-tight ${isCompleted ? "text-green-400" : "text-[#f5a0ac]"}`}>
-            {isCompleted ? "Completed" : "Live"}
+          <p className={`font-semibold text-lg tracking-tight ${statusDisplay.className}`}>
+            {statusDisplay.text}
           </p>
         </div>
       </div>
@@ -415,7 +476,7 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2 text-zinc-400 text-sm tracking-tight">
-              {volumeLoading ? (
+              {volumeLoading && !isCompleted ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <div className="h-4 w-16 bg-zinc-800 rounded animate-pulse" />
@@ -423,23 +484,21 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
               ) : (
                 <>
                   <Clock className="w-4 h-4" />
-                  <span>{isCompleted ? "Completed" : "In Progress"}</span>
+                  <span>{isCompleted ? (isPassed ? "Target reached" : "Target missed") : "In Progress"}</span>
                 </>
               )}
             </div>
-            {volumeLoading ? (
+            {volumeLoading && !isCompleted ? (
               <div className="h-4 w-20 bg-zinc-800 rounded animate-pulse" />
             ) : (
               <span className="text-zinc-400 text-sm" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
-                {formatVolumeUSD(progressAmount)} done
+                {formatVolumeUSD(progressAmount)} / {formatVolumeUSD(targetVolumeUSD)}
               </span>
             )}
           </div>
           <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${
-                isCompleted ? "bg-green-500" : "bg-[#f5a0ac]"
-              }`}
+              className={`h-full rounded-full transition-all ${getProgressBarColor()}`}
               style={{ width: `${progress}%` }}
             />
           </div>

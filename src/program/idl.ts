@@ -186,9 +186,17 @@ export type BountyExchangeProgram = {
       ],
       "accounts": [
         {
-          "name": "trader",
+          "name": "payer",
+          "docs": [
+            "Anyone can call this instruction (permissionless crank pattern).",
+            "This allows automated cron jobs to finalize deals without needing the trader's signature."
+          ],
           "writable": true,
           "signer": true
+        },
+        {
+          "name": "trader",
+          "writable": true
         },
         {
           "name": "creator"

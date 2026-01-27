@@ -29,6 +29,11 @@ export interface DealAccount {
 
 export interface DealWithMetadata extends DealAccount {
   tokenMetadata: TokenMetadata | null;
+  // DB-only fields (not available on-chain)
+  outcome?: "won" | "lost" | null;
+  volumeCompleted?: number;
+  expiresAt?: Date | null;
+  finalizedAt?: Date | null;
 }
 
 export function useDealsForTrader() {

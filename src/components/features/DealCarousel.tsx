@@ -12,6 +12,33 @@ import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 const USDC_DECIMALS = 9;
 const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
 
+function formatTimeRemaining(deal: DealWithMetadata): string {
+  const createdAtSeconds = deal.createdAt.toNumber();
+  const expirationHours = deal.expirationWindowInHours.toNumber();
+  const endTimeSeconds = createdAtSeconds + expirationHours * 3600;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const remainingSeconds = endTimeSeconds - nowSeconds;
+
+  if (remainingSeconds <= 0) {
+    return "Expired";
+  }
+
+  const hours = Math.floor(remainingSeconds / 3600);
+  const minutes = Math.floor((remainingSeconds % 3600) / 60);
+
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+  }
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  return `${minutes}m`;
+}
+
 function formatUSDC(amount: bigint | number): string {
   const value = Number(amount) / 10 ** USDC_DECIMALS;
   if (value >= 1_000_000) {
@@ -37,6 +64,7 @@ function DealCard({ deal, onClick }: DealCardProps) {
   const [imageError, setImageError] = useState(false);
   const [marketCap, setMarketCap] = useState<number | null>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(() => formatTimeRemaining(deal));
   const tokenName = deal.tokenMetadata?.name || "Unknown Token";
   const tokenSymbol = deal.tokenMetadata?.symbol || "???";
   const tokenImage = deal.tokenMetadata?.image || "";
@@ -46,6 +74,14 @@ function DealCard({ deal, onClick }: DealCardProps) {
   useEffect(() => {
     getMarketCap(deal.token.toBase58()).then(setMarketCap);
   }, [deal.token]);
+
+  // Update time remaining every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeRemaining(formatTimeRemaining(deal));
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [deal]);
 
   const showFallback = !tokenImage || imageError;
 
@@ -119,7 +155,7 @@ function DealCard({ deal, onClick }: DealCardProps) {
         )}
         <div className="text-center">
           <p className="text-gray-500 text-[11px] tracking-tight">Expires in</p>
-          <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{deal.expirationWindowInHours.toNumber()}h</p>
+          <p className="text-white font-semibold text-lg" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>{timeRemaining}</p>
         </div>
       </div>
 
