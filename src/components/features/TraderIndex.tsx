@@ -155,17 +155,7 @@ export function TraderIndex() {
 
           const data = await response.json();
           if (data.success) {
-            // Deduplicate traders by name (keep the first occurrence)
-            const seenNames = new Set<string>();
-            const uniqueTraders = data.traders.filter((trader: Trader) => {
-              const name = trader.name?.toLowerCase();
-              if (!name || seenNames.has(name)) {
-                return false;
-              }
-              seenNames.add(name);
-              return true;
-            });
-            setTraders(uniqueTraders);
+            setTraders(data.traders);
             setLoading(false);
             return; // Success, exit retry loop
           } else {

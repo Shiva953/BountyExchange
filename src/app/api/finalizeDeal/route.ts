@@ -264,22 +264,19 @@ export async function POST(request: NextRequest) {
     const volumeRaw = new BN(Math.floor(finalVolumeAtEndTime * 10 ** 9));
     const holdDurationRaw = new BN(finalHoldDurationAtEndTime);
 
-    // Check if volume meets target (in raw units)
+    // Determine expected outcome based on volume AND hold duration requirements
     const targetVolumeUSD = Number(dealAccount.targetVolume) / 10 ** 9;
-    if (finalVolumeAtEndTime < targetVolumeUSD) {
-      console.log(
-        `[FINALIZE] Volume not met: ${finalVolumeAtEndTime} < ${targetVolumeUSD}`
-      );
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Volume requirement not met: ${finalVolumeAtEndTime.toFixed(2)} < ${targetVolumeUSD.toFixed(2)} USD`,
-          volumeCompleted: finalVolumeAtEndTime,
-          targetVolume: targetVolumeUSD,
-        },
-        { status: 400 }
-      );
-    }
+    const requiredHoldDuration = Number(dealAccount.holdDurationInHours);
+    const volumeMet = finalVolumeAtEndTime >= targetVolumeUSD;
+    const holdMet = finalHoldDurationAtEndTime >= requiredHoldDuration;
+    const traderPassed = volumeMet && holdMet;
+
+    console.log(
+      `[FINALIZE] Requirements check - Volume: ${finalVolumeAtEndTime.toFixed(2)}/${targetVolumeUSD.toFixed(2)} (${volumeMet ? "MET" : "NOT MET"}), Hold: ${finalHoldDurationAtEndTime}/${requiredHoldDuration}h (${holdMet ? "MET" : "NOT MET"})`
+    );
+    console.log(
+      `[FINALIZE] Expected outcome: ${traderPassed ? "PASS (trader wins)" : "FAIL (creator refunded)"}`
+    );
 
     // Build the finalize instruction
     const { instruction } = await buildFinalizeDealInstruction(
@@ -328,6 +325,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`[FINALIZE] Transaction confirmed: ${result.signature}`);
 
+    // Determine final outcome based on requirements
+    const finalOutcome = traderPassed ? "won" : "lost";
+
     // Update DB
     const now = new Date();
     await prisma.deal.update({
@@ -335,7 +335,7 @@ export async function POST(request: NextRequest) {
       data: {
         isActive: false,
         finalizedAt: now,
-        outcome: "won",
+        outcome: finalOutcome,
         volumeCompleted: finalVolumeAtEndTime,
       },
     });
@@ -361,14 +361,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`[FINALIZE] Deal ${dealPubkey} finalized successfully!`);
+    console.log(
+      `[FINALIZE] Deal ${dealPubkey} finalized successfully! Outcome: ${finalOutcome.toUpperCase()}`
+    );
 
     return NextResponse.json({
       success: true,
       signature: result.signature,
-      outcome: "won",
+      outcome: finalOutcome,
       volumeCompleted: finalVolumeAtEndTime,
+      holdDurationCompleted: finalHoldDurationAtEndTime,
       traderAddress: dealAccount.trader.toBase58(),
+      creatorAddress: dealAccount.creator.toBase58(),
     });
   } catch (error) {
     console.error("[FINALIZE] Unexpected error:", error);

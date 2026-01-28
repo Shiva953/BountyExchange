@@ -45,6 +45,14 @@ export async function buildFinalizeDealInstruction(
     ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
+  const creatorTokenAccount = getAssociatedTokenAddressSync(
+    usdcMint,
+    dealAccount.creator,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+
   const instruction = await program.methods
     .finalizeDeal({
       volumeAtEndTime: args.volumeAtEndTime,
@@ -57,6 +65,7 @@ export async function buildFinalizeDealInstruction(
       deal: dealPubkey,
       escrowVault: escrowVault,
       traderTokenAccount: traderTokenAccount,
+      creatorTokenAccount: creatorTokenAccount,
       usdcMint: usdcMint,
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -69,6 +78,7 @@ export async function buildFinalizeDealInstruction(
     dealPubkey,
     escrowVault,
     traderTokenAccount,
+    creatorTokenAccount,
   };
 }
 

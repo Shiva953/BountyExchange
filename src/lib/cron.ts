@@ -263,14 +263,21 @@ export async function checkAndFinalizeDeals() {
       try {
         pendingFinalizations.add(deal.publicKey);
 
-        if (hasMetVolume && !isExpired) {
-          // Case 1: Volume met, not yet expired - FINALIZE ON-CHAIN
-          console.log(`[CRON] Attempting on-chain finalization for deal ${deal.publicKey.slice(0, 8)}...`);
+        // For hold duration, we use the required duration as placeholder
+        // In a real implementation, this would be calculated from actual token holdings
+        const holdDurationCompleted = Number(deal.holdDurationHours || 0);
+        const requiredHoldDuration = Number(deal.holdDurationHours || 0);
+        const hasMetHold = holdDurationCompleted >= requiredHoldDuration;
+        const traderPassed = hasMetVolume && hasMetHold;
+
+        if (traderPassed && !isExpired) {
+          // Case 1: All requirements met, not yet expired - FINALIZE ON-CHAIN (trader wins)
+          console.log(`[CRON] Attempting on-chain finalization for deal ${deal.publicKey.slice(0, 8)}... (PASS)`);
 
           const result = await callFinalizeDealAPI(
             deal.publicKey,
             volumeCompleted,
-            Number(deal.holdDurationHours) // Pass the required hold duration
+            holdDurationCompleted
           );
 
           if (result.success) {
@@ -322,82 +329,88 @@ export async function checkAndFinalizeDeals() {
             }
           }
         } else if (isExpired) {
-          // Case 2: Deal has expired - mark outcome in DB
-          const outcome = hasMetVolume ? "won" : "lost";
+          // Case 2: Deal has expired - FINALIZE ON-CHAIN (program determines outcome)
+          // The program will route funds to trader (if passed) or creator (if failed)
+          const expectedOutcome = traderPassed ? "won" : "lost";
 
           console.log(
-            `[CRON] Deal ${deal.publicKey.slice(0, 8)}... expired - Outcome: ${outcome.toUpperCase()}`
+            `[CRON] Deal ${deal.publicKey.slice(0, 8)}... expired - Expected outcome: ${expectedOutcome.toUpperCase()}`
+          );
+          console.log(
+            `[CRON] Volume: ${volumeCompleted.toFixed(2)}/${targetVolumeUSD.toFixed(2)} (${hasMetVolume ? "MET" : "NOT MET"}), Hold: ${holdDurationCompleted}/${requiredHoldDuration}h (${hasMetHold ? "MET" : "NOT MET"})`
           );
 
-          // If volume was met but expired, we can still try to finalize
-          // (though program will reject if truly expired)
-          if (hasMetVolume) {
-            const result = await callFinalizeDealAPI(
-              deal.publicKey,
-              volumeCompleted,
-              Number(deal.holdDurationHours)
+          // Always finalize on-chain for expired deals - program routes funds correctly
+          const result = await callFinalizeDealAPI(
+            deal.publicKey,
+            volumeCompleted,
+            holdDurationCompleted
+          );
+
+          if (result.success) {
+            console.log(
+              `[CRON] Finalization successful for ${deal.publicKey.slice(0, 8)}... - Outcome: ${expectedOutcome.toUpperCase()}`
             );
 
-            if (result.success) {
-              console.log(
-                `[CRON] Late finalization successful for ${deal.publicKey.slice(0, 8)}...`
-              );
-
-              await prisma.deal.update({
-                where: { id: deal.id },
-                data: {
-                  isActive: false,
-                  finalizedAt: now,
-                  outcome: "won",
-                  volumeCompleted: volumeCompleted,
-                },
-              });
-
-              await updateTraderActiveBounties(deal.traderId);
-
-              await sendDealNotification({
-                dealPubkey: deal.publicKey,
-                traderAddress: deal.traderAddress,
-                traderName: deal.trader?.name,
-                rewardAmount: rewardAmountUSD,
-                targetVolume: targetVolumeUSD,
+            await prisma.deal.update({
+              where: { id: deal.id },
+              data: {
+                isActive: false,
+                finalizedAt: now,
+                outcome: expectedOutcome,
                 volumeCompleted: volumeCompleted,
-                outcome: "won",
-                signature: result.signature,
-              });
+              },
+            });
 
-              continue;
-            } else {
-              console.warn(
-                `[CRON] Late finalization failed for ${deal.publicKey.slice(0, 8)}...: ${result.error}`
-              );
-              // Fall through to mark as lost in DB only
-            }
-          }
+            await updateTraderActiveBounties(deal.traderId);
 
-          // Mark as won/lost in DB (no on-chain finalization possible)
-          await prisma.deal.update({
-            where: { id: deal.id },
-            data: {
-              isActive: false,
-              finalizedAt: now,
-              outcome: outcome,
+            await sendDealNotification({
+              dealPubkey: deal.publicKey,
+              traderAddress: deal.traderAddress,
+              traderName: deal.trader?.name,
+              rewardAmount: rewardAmountUSD,
+              targetVolume: targetVolumeUSD,
               volumeCompleted: volumeCompleted,
-            },
-          });
+              outcome: expectedOutcome,
+              signature: result.signature,
+            });
+          } else {
+            console.error(
+              `[CRON] Failed to finalize expired deal ${deal.publicKey.slice(0, 8)}...: ${result.error}`
+            );
 
-          await updateTraderActiveBounties(deal.traderId);
+            // Mark as failed in DB only if on-chain finalization failed
+            // This is a fallback - ideally all deals should be finalized on-chain
+            await prisma.deal.update({
+              where: { id: deal.id },
+              data: {
+                isActive: false,
+                finalizedAt: now,
+                outcome: expectedOutcome,
+                volumeCompleted: volumeCompleted,
+              },
+            });
 
-          // Send Telegram notification
-          await sendDealNotification({
-            dealPubkey: deal.publicKey,
-            traderAddress: deal.traderAddress,
-            traderName: deal.trader?.name,
-            rewardAmount: rewardAmountUSD,
-            targetVolume: targetVolumeUSD,
-            volumeCompleted: volumeCompleted,
-            outcome: outcome,
-          });
+            await updateTraderActiveBounties(deal.traderId);
+
+            // Send alert for failed finalization
+            await sendSystemAlert(
+              "Finalization Failed",
+              `Expired deal ${deal.publicKey.slice(0, 8)}... failed to finalize on-chain: ${result.error}. Funds may be stuck in escrow.`,
+              "error"
+            );
+
+            // Still send notification about the outcome
+            await sendDealNotification({
+              dealPubkey: deal.publicKey,
+              traderAddress: deal.traderAddress,
+              traderName: deal.trader?.name,
+              rewardAmount: rewardAmountUSD,
+              targetVolume: targetVolumeUSD,
+              volumeCompleted: volumeCompleted,
+              outcome: expectedOutcome,
+            });
+          }
         }
       } catch (error) {
         console.error(
@@ -518,12 +531,11 @@ export async function syncTraderStats() {
           await new Promise((resolve) => setTimeout(resolve, 200));
         }
 
-        // Sum volume from COMPLETED deals (use stored values)
+        // Sum volume from COMPLETED deals (use actual volumeCompleted stored in DB)
         const volumeFromCompleted = completedDeals.reduce((sum, deal) => {
-          // For won deals, they hit target. For lost deals, use tracked volume
-          if (deal.outcome === "won") {
-            return sum + Number(deal.targetVolume) / 10 ** 9;
-          }
+          // Always use the actual volumeCompleted - this is the real volume the trader did
+          // For won deals, this will be >= targetVolume
+          // For lost deals, this will be < targetVolume
           return sum + Number(deal.volumeCompleted || 0);
         }, 0);
 

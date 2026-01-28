@@ -75,17 +75,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
         .then((res) => res.json())
         .then((data) => {
           if (data.success) {
-            // Deduplicate traders by name
-            const seenNames = new Set<string>();
-            const uniqueTraders = data.traders.filter((trader: Trader) => {
-              const name = trader.name?.toLowerCase();
-              if (!name || seenNames.has(name)) {
-                return false;
-              }
-              seenNames.add(name);
-              return true;
-            });
-            setTraders(uniqueTraders);
+            setTraders(data.traders);
           }
         })
         .catch((err) => console.error("Error fetching traders:", err))

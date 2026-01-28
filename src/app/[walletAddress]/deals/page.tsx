@@ -696,13 +696,20 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
   // Calculate total volume completed
   const totalVolumeCompleted = useMemo(() => {
     let total = 0;
-    
-    // For completed deals, use target volume (they're completed, so volume reached target)
+
+    // For completed deals, use the actual volumeCompleted stored in DB
     completedDeals.forEach((deal) => {
-      const targetVolumeUSD = Number(deal.targetVolume) / 10 ** USDC_DECIMALS;
-      total += targetVolumeUSD;
+      // Use volumeCompleted if available (from DB), otherwise fall back to target for won deals
+      if (deal.volumeCompleted !== undefined) {
+        total += deal.volumeCompleted;
+      } else if (deal.outcome === "won") {
+        // Fallback: if won but no volumeCompleted stored, use target
+        const targetVolumeUSD = Number(deal.targetVolume) / 10 ** USDC_DECIMALS;
+        total += targetVolumeUSD;
+      }
+      // For lost deals without volumeCompleted, we add 0 (they didn't complete the target)
     });
-    
+
     // For active deals, use actual tracked volume (if available)
     activeDeals.forEach((deal) => {
       const dealKey = deal.publicKey.toBase58();
@@ -711,7 +718,7 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
         total += volumeData.volumeUSD;
       }
     });
-    
+
     return total;
   }, [activeDeals, completedDeals, volumes]);
 

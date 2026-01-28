@@ -16,6 +16,8 @@ model trader {
   activeBounties  Int?
   createdAt       DateTime @default(now())
   deals           deal[]   @relation("TraderDeals")
+
+  @@index([name])
 }
 
 model deal {

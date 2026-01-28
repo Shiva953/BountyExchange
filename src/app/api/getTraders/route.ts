@@ -51,6 +51,7 @@ export async function GET(_request: NextRequest) {
             not: null,
           },
         },
+        distinct: ["name"],
         orderBy: {
           id: "desc",
         },
@@ -66,10 +67,17 @@ export async function GET(_request: NextRequest) {
       activeBounties: trader.activeBounties || 0,
     }));
 
-    return NextResponse.json({
-      success: true,
-      traders: tradersWithStats,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        traders: tradersWithStats,
+      },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        },
+      }
+    );
   } catch (error) {
     console.error("Error fetching traders:", error);
 
