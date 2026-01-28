@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { Grid3x3, Home, ShoppingBag, Zap } from "lucide-react";
+import { Grid3x3, ShoppingBag, Zap, Briefcase } from "lucide-react";
 import {} from "react-icons/fa"
 
 const WalletMultiButton = dynamic(
@@ -60,6 +60,21 @@ export const Navbar = () => {
             >
               <ShoppingBag className="w-5 h-5" />
               <span className="text-[10px] mt-1 font-medium">Trader</span>
+            </Link>
+          )}
+
+          {publicKey && (
+            <Link
+              href="/sponsor"
+              className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${
+                pathname === "/sponsor"
+                  ? "bg-white/10 text-[#ff6b8a]"
+                  : "text-zinc-500 hover:bg-white/5 hover:text-white"
+              }`}
+              title="Sponsor"
+            >
+              <Briefcase className="w-5 h-5" />
+              <span className="text-[10px] mt-1 font-medium">Sponsor</span>
             </Link>
           )}
         </div>
