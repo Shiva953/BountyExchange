@@ -75,9 +75,18 @@ export function useDealsForTrader() {
         },
       ]);
 
-      const openDeals = allDeals.filter(
-        (deal) => deal.account.isActive && !deal.account.isAccepted
-      );
+      const now = Date.now();
+      const openDeals = allDeals.filter((deal) => {
+        if (!deal.account.isActive || deal.account.isAccepted) {
+          return false;
+        }
+        // Filter out expired deals: createdAt + expirationWindowInHours < now
+        const createdAtMs = deal.account.createdAt.toNumber() * 1000;
+        const expirationMs =
+          deal.account.expirationWindowInHours.toNumber() * 60 * 60 * 1000;
+        const endTime = createdAtMs + expirationMs;
+        return endTime > now;
+      });
       const dealsWithMetadata: DealWithMetadata[] = await Promise.all(
         openDeals.map(async (deal) => {
           const tokenMetadata = await fetchTokenMetadata(deal.account.token.toBase58());
