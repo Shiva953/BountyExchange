@@ -263,8 +263,7 @@ export async function checkAndFinalizeDeals() {
       try {
         pendingFinalizations.add(deal.publicKey);
 
-        // For hold duration, we use the required duration as placeholder
-        // In a real implementation, this would be calculated from actual token holdings
+        // the current hold duration check is non-existent, needs to be updated
         const holdDurationCompleted = Number(deal.holdDurationHours || 0);
         const requiredHoldDuration = Number(deal.holdDurationHours || 0);
         const hasMetHold = holdDurationCompleted >= requiredHoldDuration;
@@ -285,7 +284,6 @@ export async function checkAndFinalizeDeals() {
               `[CRON] Deal ${deal.publicKey.slice(0, 8)}... finalized successfully! Signature: ${result.signature}`
             );
 
-            // Update DB (API already does this, but ensure consistency)
             await prisma.deal.update({
               where: { id: deal.id },
               data: {
@@ -296,7 +294,6 @@ export async function checkAndFinalizeDeals() {
               },
             });
 
-            // Update trader's active bounties
             await updateTraderActiveBounties(deal.traderId);
 
             // Send Telegram notification
@@ -340,7 +337,6 @@ export async function checkAndFinalizeDeals() {
             `[CRON] Volume: ${volumeCompleted.toFixed(2)}/${targetVolumeUSD.toFixed(2)} (${hasMetVolume ? "MET" : "NOT MET"}), Hold: ${holdDurationCompleted}/${requiredHoldDuration}h (${hasMetHold ? "MET" : "NOT MET"})`
           );
 
-          // Always finalize on-chain for expired deals - program routes funds correctly
           const result = await callFinalizeDealAPI(
             deal.publicKey,
             volumeCompleted,

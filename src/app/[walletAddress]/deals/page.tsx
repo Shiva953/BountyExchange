@@ -615,6 +615,18 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
     }
   }, [connected, router]);
 
+  // Redirect if trying to view another wallet's deals page
+  useEffect(() => {
+    if (connected && publicKey && !isOwnProfile) {
+      router.push("/");
+    }
+  }, [connected, publicKey, isOwnProfile, router]);
+
+  // Don't render content if viewing another wallet's deals page (redirect in progress)
+  if (connected && publicKey && !isOwnProfile) {
+    return null;
+  }
+
   // Filter deals based on active/completed status, search, and reward filter
   const { activeDeals, completedDeals } = useMemo(() => {
     const filterAndSort = (dealsList: DealWithMetadata[]) => {
