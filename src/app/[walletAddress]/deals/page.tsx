@@ -335,6 +335,7 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
   const outcome = deal.outcome;
   const isPassed = outcome === "won";
   const isFailed = outcome === "lost";
+  const isExpiredUnfulfilled = outcome === "expired_unfulfilled";
 
   useEffect(() => {
     getMarketCap(deal.token.toBase58()).then(setMarketCap);
@@ -358,6 +359,9 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
     if (!isCompleted) {
       return { text: "Live", className: "text-[#f5a0ac]" };
     }
+    if (isExpiredUnfulfilled) {
+      return { text: "EXPIRED", className: "text-amber-400" };
+    }
     if (isPassed) {
       return { text: "PASS", className: "text-green-400" };
     }
@@ -372,6 +376,7 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
   // Get progress bar color based on outcome
   const getProgressBarColor = () => {
     if (!isCompleted) return "bg-[#f5a0ac]";
+    if (isExpiredUnfulfilled) return "bg-amber-500";
     if (isPassed) return "bg-green-500";
     if (isFailed) return "bg-red-500";
     return "bg-zinc-500";
@@ -381,14 +386,18 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
     <Link
       href={`/deal/${deal.publicKey.toBase58()}`}
       className={`block bg-black rounded-2xl p-5 border transition-colors cursor-pointer ${
-        isCompleted && isFailed
+        isCompleted && isExpiredUnfulfilled
+          ? "border-amber-500/30 hover:border-amber-500/50"
+          : isCompleted && isFailed
           ? "border-red-500/30 hover:border-red-500/50"
           : isCompleted && isPassed
           ? "border-green-500/30 hover:border-green-500/50"
           : "border-white/10 hover:border-white/20"
       }`}
       style={{
-        background: isCompleted && isFailed
+        background: isCompleted && isExpiredUnfulfilled
+          ? "radial-gradient(ellipse 150% 150% at top center, rgba(245,158,11,0.08) 0%, rgba(245,158,11,0.02) 40%, black 80%)"
+          : isCompleted && isFailed
           ? "radial-gradient(ellipse 150% 150% at top center, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 40%, black 80%)"
           : isCompleted && isPassed
           ? "radial-gradient(ellipse 150% 150% at top center, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.02) 40%, black 80%)"
@@ -412,11 +421,15 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
               />
             )}
             {/* Outcome badge on avatar */}
-            {isCompleted && (isPassed || isFailed) && (
+            {isCompleted && (isPassed || isFailed || isExpiredUnfulfilled) && (
               <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-2 border-black flex items-center justify-center ${
-                isPassed ? "bg-green-500" : "bg-red-500"
+                isExpiredUnfulfilled ? "bg-amber-500" : isPassed ? "bg-green-500" : "bg-red-500"
               }`}>
-                {isPassed ? (
+                {isExpiredUnfulfilled ? (
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                  </svg>
+                ) : isPassed ? (
                   <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>

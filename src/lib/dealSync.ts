@@ -149,6 +149,11 @@ export async function cleanupFinalizedDeals(olderThanHours: number = 24) {
         finalizedAt: {
           lte: cutoffDate,
         },
+        // Don't delete expired_unfulfilled deals - they still have funds stuck on-chain
+        // and need admin reclaim before cleanup
+        outcome: {
+          not: "expired_unfulfilled",
+        },
       },
     });
 

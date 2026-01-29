@@ -75,7 +75,7 @@ export function useTraderDeals(walletAddress: string | null) {
         isAccepted: dbDeal.isAccepted,
         tokenMetadata,
         // DB-specific fields
-        outcome: dbDeal.outcome as "won" | "lost" | null,
+        outcome: dbDeal.outcome as "won" | "lost" | "expired_unfulfilled" | null,
         volumeCompleted: dbDeal.volumeCompleted ? Number(dbDeal.volumeCompleted) : undefined,
         expiresAt: dbDeal.expiresAt ? new Date(dbDeal.expiresAt) : null,
       };

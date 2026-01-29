@@ -540,6 +540,76 @@ export async function syncTraderStats() {
 }
 
 /**
+ * Marks orphaned deals as expired_unfulfilled.
+ * These are deals that expired long ago but were never finalized on-chain
+ * (e.g. cron was not running at the time, or deals predate the finalization logic).
+ * We mark them with a distinct outcome so the UI shows them as "Expired" rather than "Active",
+ * without falsely claiming won/lost (since on-chain state was never updated).
+ */
+export async function markOrphanedDeals() {
+  console.log("[CRON] Checking for orphaned deals...");
+
+  try {
+    const now = new Date();
+    // Consider deals orphaned if they expired more than 1 hour ago and are still active
+    const orphanThreshold = new Date(now.getTime() - 60 * 60 * 1000);
+
+    const orphanedDeals = await prisma.deal.findMany({
+      where: {
+        isActive: true,
+        isAccepted: true,
+        expiresAt: {
+          lte: orphanThreshold,
+        },
+      },
+      include: {
+        trader: true,
+      },
+    });
+
+    if (orphanedDeals.length === 0) {
+      console.log("[CRON] No orphaned deals found");
+      return;
+    }
+
+    console.log(`[CRON] Found ${orphanedDeals.length} orphaned deals to mark as expired_unfulfilled`);
+
+    for (const deal of orphanedDeals) {
+      try {
+        await prisma.deal.update({
+          where: { id: deal.id },
+          data: {
+            isActive: false,
+            outcome: "expired_unfulfilled",
+            finalizedAt: now,
+          },
+        });
+
+        if (deal.traderId) {
+          await updateTraderActiveBounties(deal.traderId);
+        }
+
+        console.log(
+          `[CRON] Marked deal ${deal.publicKey.slice(0, 8)}... as expired_unfulfilled (expired at ${deal.expiresAt?.toISOString()})`
+        );
+      } catch (error) {
+        console.error(`[CRON] Error marking orphaned deal ${deal.publicKey}:`, error);
+      }
+    }
+
+    await sendSystemAlert(
+      "Orphaned Deals Detected",
+      `Marked ${orphanedDeals.length} orphaned deal(s) as expired_unfulfilled. These need admin reclaim on-chain.`,
+      "warning"
+    );
+
+    console.log("[CRON] Orphaned deal check complete");
+  } catch (error) {
+    console.error("[CRON] Error in markOrphanedDeals:", error);
+  }
+}
+
+/**
  * Cleans up old finalized deals from the database
  */
 export async function runCleanup() {
@@ -577,11 +647,17 @@ export function initCronJobs() {
   });
   console.log(`[CRON] Scheduled trader stats sync: ${TRADER_STATS_INTERVAL}`);
 
-  // Cleanup old finalized deals - every hour
+  // Mark orphaned deals - every hour (deals expired >1h ago that were never finalized)
   cron.schedule(CLEANUP_INTERVAL, () => {
+    markOrphanedDeals().catch(console.error);
+  });
+  console.log(`[CRON] Scheduled orphaned deal check: ${CLEANUP_INTERVAL}`);
+
+  // Cleanup old finalized deals - every hour (offset by 30 min)
+  cron.schedule("30 * * * *", () => {
     runCleanup().catch(console.error);
   });
-  console.log(`[CRON] Scheduled cleanup: ${CLEANUP_INTERVAL}`);
+  console.log(`[CRON] Scheduled cleanup: 30 * * * *`);
 
   isInitialized = true;
   console.log("[CRON] All cron jobs initialized successfully");

@@ -30,7 +30,7 @@ export interface DealAccount {
 export interface DealWithMetadata extends DealAccount {
   tokenMetadata: TokenMetadata | null;
   // DB-only fields (not available on-chain)
-  outcome?: "won" | "lost" | null;
+  outcome?: "won" | "lost" | "expired_unfulfilled" | null;
   volumeCompleted?: number;
   expiresAt?: Date | null;
   finalizedAt?: Date | null;
