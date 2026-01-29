@@ -375,37 +375,13 @@ export async function checkAndFinalizeDeals() {
               `[CRON] Failed to finalize expired deal ${deal.publicKey.slice(0, 8)}...: ${result.error}`
             );
 
-            // Mark as failed in DB only if on-chain finalization failed
-            // This is a fallback - ideally all deals should be finalized on-chain
-            await prisma.deal.update({
-              where: { id: deal.id },
-              data: {
-                isActive: false,
-                finalizedAt: now,
-                outcome: expectedOutcome,
-                volumeCompleted: volumeCompleted,
-              },
-            });
-
-            await updateTraderActiveBounties(deal.traderId);
-
-            // Send alert for failed finalization
+            // Do NOT update DB - on-chain deal is still active, so DB must stay in sync.
+            // The cron will retry finalization on the next run.
             await sendSystemAlert(
               "Finalization Failed",
-              `Expired deal ${deal.publicKey.slice(0, 8)}... failed to finalize on-chain: ${result.error}. Funds may be stuck in escrow.`,
+              `Expired deal ${deal.publicKey.slice(0, 8)}... failed to finalize on-chain: ${result.error}. Will retry on next cron run.`,
               "error"
             );
-
-            // Still send notification about the outcome
-            await sendDealNotification({
-              dealPubkey: deal.publicKey,
-              traderAddress: deal.traderAddress,
-              traderName: deal.trader?.name,
-              rewardAmount: rewardAmountUSD,
-              targetVolume: targetVolumeUSD,
-              volumeCompleted: volumeCompleted,
-              outcome: expectedOutcome,
-            });
           }
         }
       } catch (error) {
