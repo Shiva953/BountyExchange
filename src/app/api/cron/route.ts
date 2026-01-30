@@ -5,11 +5,12 @@ import {
   syncTraderStats,
   runCleanup,
   markOrphanedDeals,
+  reconcileOnChainState,
 } from "@/lib/cron";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
-type CronJob = "sync-volumes" | "check-expired" | "sync-traders" | "cleanup" | "mark-orphaned";
+type CronJob = "sync-volumes" | "check-expired" | "sync-traders" | "cleanup" | "mark-orphaned" | "reconcile";
 
 const jobHandlers: Record<CronJob, () => Promise<void>> = {
   "sync-volumes": syncDealVolumes,
@@ -17,6 +18,7 @@ const jobHandlers: Record<CronJob, () => Promise<void>> = {
   "sync-traders": syncTraderStats,
   cleanup: runCleanup,
   "mark-orphaned": markOrphanedDeals,
+  reconcile: reconcileOnChainState,
 };
 
 export async function POST(request: NextRequest) {
@@ -30,7 +32,7 @@ export async function POST(request: NextRequest) {
 
   if (!job || !jobHandlers[job]) {
     return NextResponse.json(
-      { error: "Invalid job. Use: sync-volumes, check-expired, sync-traders, cleanup, mark-orphaned" },
+      { error: "Invalid job. Use: sync-volumes, check-expired, sync-traders, cleanup, mark-orphaned, reconcile" },
       { status: 400 }
     );
   }

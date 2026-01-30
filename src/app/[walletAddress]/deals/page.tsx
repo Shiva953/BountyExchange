@@ -332,10 +332,20 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
   const tokenImage = deal.tokenMetadata?.image || "";
 
   // Get outcome from deal for completed deals
-  const outcome = deal.outcome;
-  const isPassed = outcome === "won";
-  const isFailed = outcome === "lost";
-  const isExpiredUnfulfilled = outcome === "expired_unfulfilled";
+  // If no outcome from DB, derive from volume — but only once volume is loaded
+  const targetVolumeForOutcome = Number(deal.targetVolume) / 10 ** USDC_DECIMALS;
+  const outcome = deal.outcome ?? (isCompleted && !deal.isActive ? null : undefined);
+  const derivedOutcome = (() => {
+    if (outcome) return outcome;
+    if (!isCompleted) return undefined;
+    // Don't derive while volume is still loading (would always show FAIL)
+    if (volumeLoading && deal.volumeCompleted === undefined) return undefined;
+    const vol = deal.volumeCompleted !== undefined ? deal.volumeCompleted : volumeUSD;
+    return vol >= targetVolumeForOutcome ? "won" : "lost";
+  })();
+  const isPassed = derivedOutcome === "won";
+  const isFailed = derivedOutcome === "lost";
+  const outcomeLoading = isCompleted && !derivedOutcome;
 
   useEffect(() => {
     getMarketCap(deal.token.toBase58()).then(setMarketCap);
@@ -359,8 +369,8 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
     if (!isCompleted) {
       return { text: "Live", className: "text-[#f5a0ac]" };
     }
-    if (isExpiredUnfulfilled) {
-      return { text: "EXPIRED", className: "text-amber-400" };
+    if (outcomeLoading) {
+      return { text: "...", className: "text-zinc-500 animate-pulse" };
     }
     if (isPassed) {
       return { text: "PASS", className: "text-green-400" };
@@ -376,7 +386,6 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
   // Get progress bar color based on outcome
   const getProgressBarColor = () => {
     if (!isCompleted) return "bg-[#f5a0ac]";
-    if (isExpiredUnfulfilled) return "bg-amber-500";
     if (isPassed) return "bg-green-500";
     if (isFailed) return "bg-red-500";
     return "bg-zinc-500";
@@ -385,19 +394,15 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
   return (
     <Link
       href={`/deal/${deal.publicKey.toBase58()}`}
-      className={`block bg-black rounded-2xl p-5 border transition-colors cursor-pointer ${
-        isCompleted && isExpiredUnfulfilled
-          ? "border-amber-500/30 hover:border-amber-500/50"
-          : isCompleted && isFailed
+      className={`block bg-black rounded-2xl p-5 border transition-all duration-300 cursor-pointer ${
+        isCompleted && isFailed
           ? "border-red-500/30 hover:border-red-500/50"
           : isCompleted && isPassed
           ? "border-green-500/30 hover:border-green-500/50"
           : "border-white/10 hover:border-white/20"
       }`}
       style={{
-        background: isCompleted && isExpiredUnfulfilled
-          ? "radial-gradient(ellipse 150% 150% at top center, rgba(245,158,11,0.08) 0%, rgba(245,158,11,0.02) 40%, black 80%)"
-          : isCompleted && isFailed
+        background: isCompleted && isFailed
           ? "radial-gradient(ellipse 150% 150% at top center, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 40%, black 80%)"
           : isCompleted && isPassed
           ? "radial-gradient(ellipse 150% 150% at top center, rgba(34,197,94,0.08) 0%, rgba(34,197,94,0.02) 40%, black 80%)"
@@ -421,15 +426,11 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
               />
             )}
             {/* Outcome badge on avatar */}
-            {isCompleted && (isPassed || isFailed || isExpiredUnfulfilled) && (
+            {isCompleted && !outcomeLoading && (isPassed || isFailed) && (
               <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-2 border-black flex items-center justify-center ${
-                isExpiredUnfulfilled ? "bg-amber-500" : isPassed ? "bg-green-500" : "bg-red-500"
+                isPassed ? "bg-green-500" : "bg-red-500"
               }`}>
-                {isExpiredUnfulfilled ? (
-                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                  </svg>
-                ) : isPassed ? (
+                {isPassed ? (
                   <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
@@ -489,7 +490,7 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2 text-zinc-400 text-sm tracking-tight">
-              {volumeLoading && !isCompleted ? (
+              {volumeLoading && !(isCompleted && deal.volumeCompleted !== undefined) ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <div className="h-4 w-16 bg-zinc-800 rounded animate-pulse" />
@@ -501,7 +502,7 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
                 </>
               )}
             </div>
-            {volumeLoading && !isCompleted ? (
+            {volumeLoading && !(isCompleted && deal.volumeCompleted !== undefined) ? (
               <div className="h-4 w-20 bg-zinc-800 rounded animate-pulse" />
             ) : (
               <span className="text-zinc-400 text-sm" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
@@ -607,6 +608,7 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
   const { deals, traderData, loading, error } = useTraderDeals(walletAddress);
   const { deals: availableDeals, loading: availableLoading } = useDealsForTrader();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  const [completedSubTab, setCompletedSubTab] = useState<"all" | "pass" | "fail">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [rewardFilter, setRewardFilter] = useState<RewardFilter>("all");
   const [sortBy, setSortBy] = useState<SortOption>("reward_desc");
@@ -695,12 +697,52 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
       return filtered;
     };
 
-    const active = filterAndSort(deals.filter((deal) => deal.isActive && deal.isAccepted));
-    const completed = filterAndSort(deals.filter((deal) => !deal.isActive && deal.isAccepted));
+    const now = Date.now() / 1000;
+    const BUFFER_SEC = 60 * 60; // 60 minutes — matches cron finalization buffer
+    const active = filterAndSort(deals.filter((deal) => {
+      if (!deal.isActive || !deal.isAccepted) return false;
+      // Hide orphaned deals (still isActive on-chain but past expiry + buffer)
+      const expiresAt = deal.createdAt.toNumber() + deal.expirationWindowInHours.toNumber() * 3600;
+      return now < expiresAt + BUFFER_SEC;
+    }));
+    const completed = filterAndSort(deals.filter((deal) => {
+      if (!deal.isAccepted) return false;
+      // Deals finalized on-chain (isActive: false)
+      if (!deal.isActive) {
+        // Exclude expired_unfulfilled deals — never finalized on-chain
+        if (deal.outcome === "expired_unfulfilled") return false;
+        return true;
+      }
+      // Still isActive but past expiry + buffer — cron should have finalized by now.
+      // If it hasn't, hide from both tabs (never-finalized deal).
+      return false;
+    }));
     return { activeDeals: active, completedDeals: completed };
   }, [deals, searchQuery, rewardFilter, sortBy]);
 
-  const displayedDeals = activeTab === "active" ? activeDeals : completedDeals;
+  // Helper to derive outcome for a deal (same logic as DealCard)
+  const getDerivedOutcome = (deal: DealWithMetadata): "won" | "lost" | undefined => {
+    if (deal.outcome === "won" || deal.outcome === "lost") return deal.outcome;
+    // If no outcome from DB, derive from volumeCompleted
+    if (deal.volumeCompleted !== undefined) {
+      const targetVolumeUSD = Number(deal.targetVolume) / 10 ** USDC_DECIMALS;
+      return deal.volumeCompleted >= targetVolumeUSD ? "won" : "lost";
+    }
+    return undefined;
+  };
+
+  // Filter completed deals by sub-tab
+  const filteredCompletedDeals = useMemo(() => {
+    if (completedSubTab === "all") return completedDeals;
+    return completedDeals.filter((deal) => {
+      const outcome = getDerivedOutcome(deal);
+      if (completedSubTab === "pass") return outcome === "won";
+      if (completedSubTab === "fail") return outcome === "lost";
+      return true;
+    });
+  }, [completedDeals, completedSubTab]);
+
+  const displayedDeals = activeTab === "active" ? activeDeals : filteredCompletedDeals;
 
   // Create volume requests for all active and completed deals (batch fetch in parallel)
   // Include minBuyVolume converted from USDC decimals to USD for filtering
@@ -814,6 +856,37 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
           sortBy={sortBy}
           onSortChange={setSortBy}
         />
+
+        {/* Completed sub-tabs */}
+        {activeTab === "completed" && completedDeals.length > 0 && (
+          <div className="flex gap-2 mb-5">
+            {(["all", "pass", "fail"] as const).map((tab) => {
+              const count = tab === "all"
+                ? completedDeals.length
+                : tab === "pass"
+                ? completedDeals.filter((d) => getDerivedOutcome(d) === "won").length
+                : completedDeals.filter((d) => getDerivedOutcome(d) === "lost").length;
+              const label = tab === "all" ? "All" : tab === "pass" ? "Pass" : "Fail";
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setCompletedSubTab(tab)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold tracking-tight transition-all duration-200 cursor-pointer ${
+                    completedSubTab === tab
+                      ? tab === "pass"
+                        ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                        : tab === "fail"
+                        ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                        : "bg-white/10 text-white border border-white/20"
+                      : "bg-white/5 text-zinc-500 hover:bg-white/10 hover:text-zinc-300 border border-transparent"
+                  }`}
+                >
+                  {label} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Content */}
         {loading && (

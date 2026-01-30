@@ -339,8 +339,17 @@ export default function DealPage() {
             <span className="text-sm tracking-tight">Return to Market</span>
           </Link>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-green-500 text-sm font-medium tracking-tight">Bounty Live</span>
+            {deal.isActive ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-green-500 text-sm font-medium tracking-tight">Bounty Live</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-red-500 text-sm font-medium tracking-tight">Bounty Ended</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -522,7 +531,7 @@ export default function DealPage() {
             )}
           </>
         )}
-        {!deal.isActive && (
+        {!deal.isActive && !deal.isAccepted && (
           <p className="text-center text-red-500 mt-4 text-sm tracking-tight">
             This bounty is no longer active
           </p>
