@@ -8,16 +8,22 @@ datasource db {
 }
 
 model trader {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   name            String?
-  address         String   @unique
+  address         String    @unique
   imageUrl        String?
-  volumeCompleted Decimal? @db.Decimal
+  volumeCompleted Decimal?  @db.Decimal
   activeBounties  Int?
-  createdAt       DateTime @default(now())
-  deals           deal[]   @relation("TraderDeals")
+  createdAt       DateTime  @default(now())
+  deals           deal[]    @relation("TraderDeals")
+
+  // Telegram integration
+  telegramUserId   String?   @unique
+  telegramLinkedAt DateTime?
+  notificationSettings notification_settings?
 
   @@index([name])
+  @@index([telegramUserId])
 }
 
 model deal {
@@ -48,4 +54,52 @@ model deal {
   @@index([traderId])
   @@index([expiresAt])
   @@index([isActive, isAccepted])
+}
+
+// Notification preferences per trader
+model notification_settings {
+  id                 Int      @id @default(autoincrement())
+  traderId           Int      @unique
+  trader             trader   @relation(fields: [traderId], references: [id])
+
+  // What to notify
+  dealAccepted       Boolean  @default(true)
+  progressMilestones Boolean  @default(true)
+  dailySummary       Boolean  @default(true)
+  expiryWarnings     Boolean  @default(true)
+  dealFinalized      Boolean  @default(true)
+
+  // Milestone thresholds (percentage values)
+  milestoneThresholds Int[]   @default([25, 50, 75, 90])
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// Track sent notifications to prevent duplicates
+model notification_log {
+  id        Int      @id @default(autoincrement())
+  traderId  Int
+  dealId    Int?
+  type      String   // "milestone_25", "expiry_24h", "finalized_won", etc.
+  sentAt    DateTime @default(now())
+  messageId String?  // Telegram message ID for potential edits
+
+  @@unique([traderId, dealId, type])
+  @@index([traderId])
+  @@index([dealId])
+}
+
+// Pending wallet verifications for Telegram linking
+model wallet_verification {
+  id             Int      @id @default(autoincrement())
+  telegramUserId String
+  walletAddress  String
+  verifyCode     String   @unique
+  expiresAt      DateTime
+  verified       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([telegramUserId])
+  @@index([verifyCode])
 }

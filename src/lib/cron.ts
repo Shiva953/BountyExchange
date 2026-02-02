@@ -7,31 +7,39 @@ import { cleanupFinalizedDeals } from "./dealSync";
 import { sendDealNotification, sendSystemAlert } from "./telegram";
 import { getProgram, PROGRAM_ID } from "@/program/instructions/createDeal";
 import { BountyExchangeProgram } from "@/program/idl";
+import {
+  checkAndSendMilestoneNotifications,
+  checkAndSendExpiryWarnings,
+  sendFinalizationNotification,
+  sendDailySummaries,
+} from "./notifications";
 
-const FINALIZE_CHECK_INTERVAL = "* * * * *"; // Every minute
-const TRADER_STATS_INTERVAL = "*/2 * * * *"; // Every 2 minutes - calculates volumes + aggregates
-const RECONCILE_INTERVAL = "*/5 * * * *"; // Every 5 minutes
-const CLEANUP_INTERVAL = "0 * * * *"; // Every hour
+const FINALIZE_CHECK_INTERVAL = "* * * * *";
+const TRADER_STATS_INTERVAL = "*/2 * * * *";
+const RECONCILE_INTERVAL = "*/2 * * * *";
+const CLEANUP_INTERVAL = "0 * * * *";
 
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 500;
-
-// Finalization retry configuration
 const FINALIZE_MAX_RETRIES = 5;
 const FINALIZE_RETRY_DELAY_MS = 2000;
-
-// Buffer time before expiration to attempt finalization (60 minutes)
 const FINALIZATION_BUFFER_MS = 60 * 60 * 1000;
 
 let isInitialized = false;
-
-// Locks to prevent overlapping cron executions
 let isTraderStatsSyncRunning = false;
 let isFinalizationRunning = false;
 let isReconciliationRunning = false;
 
-// Track deals that are being finalized to avoid duplicate attempts
 const pendingFinalizations = new Set<string>();
+
+/**
+ * Sanitizes a wallet address by removing any query parameters (e.g. ?timeframe=24h)
+ * that may have been accidentally stored in the database.
+ */
+function sanitizeAddress(address: string): string {
+  const queryIndex = address.indexOf("?");
+  return queryIndex === -1 ? address : address.slice(0, queryIndex);
+}
 
 /**
  * Safely fetches all deal accounts from on-chain, skipping any that fail to deserialize.
@@ -62,7 +70,6 @@ async function fetchAllDealsOnChain(
       const decoded = program.coder.accounts.decode("deal", raw.account.data);
       deals.push({ publicKey: raw.pubkey, account: decoded });
     } catch {
-      // Skip accounts that fail to deserialize (old layout, corrupted, etc.)
       console.warn(`[CRON] Skipping undeserializable deal account: ${raw.pubkey.toBase58().slice(0, 8)}...`);
     }
   }
@@ -140,7 +147,6 @@ async function callFinalizeDealAPI(
         };
       }
 
-      // Check if error is retryable
       const isRetryable =
         response.status >= 500 ||
         data.error?.includes("blockhash") ||
@@ -195,7 +201,6 @@ export async function syncDealVolumes() {
     console.log(`[CRON] Found ${activeDeals.length} active deals to sync`);
 
     for (const deal of activeDeals) {
-      // Calculate volume from deal acceptance time
       const startTime = deal.acceptedAt
         ? Math.floor(deal.acceptedAt.getTime() / 1000)
         : undefined;
@@ -207,10 +212,10 @@ export async function syncDealVolumes() {
       const volumeResult = await withRetry(
         async () => {
           const result = await calculateTokenVolumeFast(
-            deal.traderAddress,
+            sanitizeAddress(deal.traderAddress),
             deal.token,
             startTime,
-            undefined, // endTime - now
+            undefined,
             minBuyVolumeUSD
           );
           if (!result.success) {
@@ -241,7 +246,6 @@ export async function syncDealVolumes() {
         }
       }
 
-      // Small delay between deals to avoid rate limiting
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
 
@@ -281,19 +285,16 @@ export async function checkAndFinalizeDeals() {
     );
     const program = getProgram(connection);
 
-    // Fetch all on-chain deals with current IDL size, then filter in JS
     const allOnChainDeals = await fetchAllDealsOnChain(program, connection);
     const activeAcceptedDeals = allOnChainDeals.filter(
       (d) => d.account.isActive && d.account.isAccepted
     );
 
-    // Filter to deals within ±60 min of their expiry time
     const dealsToCheck = activeAcceptedDeals.filter((d) => {
       const createdAt = d.account.createdAt.toNumber();
       const expirationHours = d.account.expirationWindowInHours.toNumber();
       const expiresAtSec = createdAt + expirationHours * 3600;
       const bufferSec = FINALIZATION_BUFFER_MS / 1000;
-      // Must be within [expiry - buffer, expiry + buffer]
       return nowSec >= expiresAtSec - bufferSec && nowSec <= expiresAtSec + bufferSec;
     });
 
@@ -310,7 +311,6 @@ export async function checkAndFinalizeDeals() {
         continue;
       }
 
-      // Verify escrow vault still exists on-chain (if closed, deal was already finalized)
       const escrowVaultInfo = await connection.getAccountInfo(account.escrowVault);
       if (!escrowVaultInfo) {
         console.log(`[CRON] Skipping ${pubkey.slice(0, 8)}... - escrow vault already closed (deal already finalized on-chain)`);
@@ -326,7 +326,6 @@ export async function checkAndFinalizeDeals() {
       const rewardAmountUSD = Number(account.rewardAmount) / 10 ** 9;
       const traderAddress = account.trader.toBase58();
 
-      // Calculate volume fresh from Helius — not from DB
       let volumeCompleted = 0;
       const minBuyVolumeUSD = account.minBuyVolume
         ? Number(account.minBuyVolume) / 10 ** 9
@@ -349,7 +348,6 @@ export async function checkAndFinalizeDeals() {
 
       const hasMetVolume = volumeCompleted >= targetVolumeUSD;
 
-      // Hold duration check — currently non-existent, needs to be updated
       const holdDurationCompleted = Number(account.holdDurationInHours) || 0;
       const requiredHoldDuration = Number(account.holdDurationInHours) || 0;
       const hasMetHold = holdDurationCompleted >= requiredHoldDuration;
@@ -363,7 +361,6 @@ export async function checkAndFinalizeDeals() {
         pendingFinalizations.add(pubkey);
 
         if (traderPassed && !isExpired) {
-          // Case 1: All requirements met, not yet expired — trader wins
           console.log(`[CRON] Attempting on-chain finalization for deal ${pubkey.slice(0, 8)}... (PASS)`);
 
           const result = await callFinalizeDealAPI(pubkey, volumeCompleted, holdDurationCompleted);
@@ -371,7 +368,6 @@ export async function checkAndFinalizeDeals() {
           if (result.success) {
             console.log(`[CRON] Deal ${pubkey.slice(0, 8)}... finalized! Signature: ${result.signature}`);
 
-            // Best-effort DB update — if DB is down, reconciliation cron catches it later
             try {
               const dbDeal = await prisma.deal.findUnique({ where: { publicKey: pubkey } });
               if (dbDeal) {
@@ -380,6 +376,20 @@ export async function checkAndFinalizeDeals() {
                   data: { isActive: false, finalizedAt: now, outcome: "won", volumeCompleted },
                 });
                 await updateTraderActiveBounties(dbDeal.traderId);
+
+                await sendFinalizationNotification(
+                  {
+                    id: dbDeal.id,
+                    traderId: dbDeal.traderId,
+                    token: dbDeal.token,
+                    targetVolume: targetVolumeUSD,
+                    volumeCompleted,
+                    rewardAmount: rewardAmountUSD,
+                    expiresAt: dbDeal.expiresAt,
+                  },
+                  "won",
+                  result.signature
+                );
               }
             } catch (dbError) {
               console.error(`[CRON] DB update failed for ${pubkey.slice(0, 8)}... (will be reconciled):`, dbError);
@@ -407,7 +417,6 @@ export async function checkAndFinalizeDeals() {
             }
           }
         } else if (isExpired) {
-          // Case 2: Deal expired — finalize with computed outcome
           const expectedOutcome = traderPassed ? "won" : "lost";
 
           console.log(`[CRON] Deal ${pubkey.slice(0, 8)}... expired - Expected: ${expectedOutcome.toUpperCase()}`);
@@ -420,7 +429,6 @@ export async function checkAndFinalizeDeals() {
           if (result.success) {
             console.log(`[CRON] Finalized ${pubkey.slice(0, 8)}... → ${expectedOutcome.toUpperCase()}`);
 
-            // Best-effort DB update
             try {
               const dbDeal = await prisma.deal.findUnique({ where: { publicKey: pubkey } });
               if (dbDeal) {
@@ -429,6 +437,20 @@ export async function checkAndFinalizeDeals() {
                   data: { isActive: false, finalizedAt: now, outcome: expectedOutcome, volumeCompleted },
                 });
                 await updateTraderActiveBounties(dbDeal.traderId);
+
+                await sendFinalizationNotification(
+                  {
+                    id: dbDeal.id,
+                    traderId: dbDeal.traderId,
+                    token: dbDeal.token,
+                    targetVolume: targetVolumeUSD,
+                    volumeCompleted,
+                    rewardAmount: rewardAmountUSD,
+                    expiresAt: dbDeal.expiresAt,
+                  },
+                  expectedOutcome as "won" | "lost",
+                  result.signature
+                );
               }
             } catch (dbError) {
               console.error(`[CRON] DB update failed for ${pubkey.slice(0, 8)}... (will be reconciled):`, dbError);
@@ -459,7 +481,6 @@ export async function checkAndFinalizeDeals() {
         pendingFinalizations.delete(pubkey);
       }
 
-      // Small delay between deals
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
@@ -512,7 +533,6 @@ export async function syncTraderStats() {
 
     for (const trader of traders) {
       try {
-        // Get all accepted deals for this trader
         const deals = await prisma.deal.findMany({
           where: {
             traderId: trader.id,
@@ -523,7 +543,6 @@ export async function syncTraderStats() {
         const completedDeals = deals.filter((d) => !d.isActive);
         const activeDeals = deals.filter((d) => d.isActive);
 
-        // Calculate volume for each ACTIVE deal using calculateTokenVolumeFast
         let volumeFromActive = 0;
         for (const deal of activeDeals) {
           const startTime = deal.acceptedAt
@@ -537,10 +556,10 @@ export async function syncTraderStats() {
           const volumeResult = await withRetry(
             async () => {
               const result = await calculateTokenVolumeFast(
-                deal.traderAddress,
+                sanitizeAddress(deal.traderAddress),
                 deal.token,
                 startTime,
-                undefined, // endTime - now
+                undefined,
                 minBuyVolumeUSD
               );
               if (!result.success) {
@@ -552,35 +571,45 @@ export async function syncTraderStats() {
           );
 
           if (volumeResult) {
-            // Update deal's volumeCompleted in DB
+            const previousVolume = Number(deal.volumeCompleted || 0);
+            const newVolume = volumeResult.volumeUSD;
+            const targetVolume = Number(deal.targetVolume) / 10 ** 9;
+
             await prisma.deal.update({
               where: { id: deal.id },
-              data: { volumeCompleted: volumeResult.volumeUSD },
+              data: { volumeCompleted: newVolume },
             });
 
-            volumeFromActive += volumeResult.volumeUSD;
+            volumeFromActive += newVolume;
 
             console.log(
-              `[CRON] Deal ${deal.publicKey.slice(0, 8)}...: volume = $${volumeResult.volumeUSD.toFixed(2)}`
+              `[CRON] Deal ${deal.publicKey.slice(0, 8)}...: volume = $${newVolume.toFixed(2)}`
             );
+
+            const dealInfo = {
+              id: deal.id,
+              traderId: deal.traderId,
+              token: deal.token,
+              targetVolume: targetVolume,
+              volumeCompleted: newVolume,
+              rewardAmount: Number(deal.rewardAmount) / 10 ** 9,
+              expiresAt: deal.expiresAt,
+            };
+
+            await checkAndSendMilestoneNotifications(dealInfo, previousVolume);
+            await checkAndSendExpiryWarnings(dealInfo);
           }
 
-          // Small delay to avoid rate limiting
           await new Promise((resolve) => setTimeout(resolve, 200));
         }
 
-        // Sum volume from COMPLETED deals (use actual volumeCompleted stored in DB)
         const volumeFromCompleted = completedDeals.reduce((sum, deal) => {
-          // Always use the actual volumeCompleted - this is the real volume the trader did
-          // For won deals, this will be >= targetVolume
-          // For lost deals, this will be < targetVolume
           return sum + Number(deal.volumeCompleted || 0);
         }, 0);
 
         const totalVolumeCompleted = volumeFromCompleted + volumeFromActive;
         const activeBounties = activeDeals.length;
 
-        // Update trader stats
         await prisma.trader.update({
           where: { id: trader.id },
           data: {
@@ -607,9 +636,16 @@ export async function syncTraderStats() {
 
 /**
  * Reconciles DB state with on-chain state.
- * Handles two cases:
+ *
+ * IMPORTANT: For finalized deals, outcome and volumeCompletedUsd are read DIRECTLY
+ * from on-chain state. We do NOT recalculate volume — it was captured at finalization
+ * time with the correct token price.
+ *
+ * Cases handled:
  * 1. Deals finalized on-chain but DB wasn't updated (e.g. DB was down during finalization)
  * 2. Deals created+accepted on-chain but never added to DB (e.g. DB was down during acceptance)
+ * 3. Active deals — update volume progress for progress bars
+ * 4. Both completed — sync from on-chain if DB values are stale
  *
  * Only checks traders that have DB records. For each trader, fetches their on-chain deals
  * and compares against DB state. Cheap operation — only reads on-chain accounts, no txns.
@@ -630,28 +666,26 @@ export async function reconcileOnChainState() {
     );
     const program = getProgram(connection);
 
-    // Get all traders from DB
     const traders = await prisma.trader.findMany();
     let totalSynced = 0;
     let totalCreated = 0;
 
     for (const trader of traders) {
       try {
-        // Fetch all on-chain deals for this trader (safe — skips undeserializable accounts)
+        const cleanAddress = sanitizeAddress(trader.address);
         const onChainDeals = await fetchAllDealsOnChain(program, connection, [{
-          offset: 80, // trader field offset
-          bytes: trader.address,
+          offset: 80,
+          bytes: cleanAddress,
         }]);
 
         const acceptedOnChain = onChainDeals.filter((d) => d.account.isAccepted);
 
-        if (acceptedOnChain.length === 0) continue;
-
-        // Get all DB deals for this trader
         const dbDeals = await prisma.deal.findMany({
           where: { traderId: trader.id, isAccepted: true },
         });
         const dbDealMap = new Map(dbDeals.map((d) => [d.publicKey, d]));
+
+        if (acceptedOnChain.length === 0) continue;
 
         for (const onChainDeal of acceptedOnChain) {
           const pubkey = onChainDeal.publicKey.toBase58();
@@ -659,48 +693,23 @@ export async function reconcileOnChainState() {
           const dbDeal = dbDealMap.get(pubkey);
 
           if (!dbDeal) {
-            // Case 2: Deal exists on-chain but not in DB — create it
             const createdAt = new Date(Number(account.createdAt) * 1000);
-            // Estimate acceptedAt as createdAt since we don't know the exact time
             const acceptedAt = createdAt;
             const expiresAt = new Date(
               acceptedAt.getTime() +
                 Number(account.expirationWindowInHours) * 60 * 60 * 1000
             );
 
-            // If deal is already finalized on-chain, calculate volume to determine outcome
             let volumeCompleted = 0;
             let outcome: string | null = null;
 
             if (!account.isActive) {
-              // Deal was finalized — calculate volume to determine pass/fail
-              const startTime = Math.floor(acceptedAt.getTime() / 1000);
-              const endTime = Math.floor(expiresAt.getTime() / 1000);
-              const minBuyVolumeUSD = account.minBuyVolume
-                ? Number(account.minBuyVolume) / 10 ** 9
-                : undefined;
-
-              try {
-                const volumeResult = await calculateTokenVolumeFast(
-                  trader.address,
-                  account.token.toBase58(),
-                  startTime,
-                  endTime,
-                  minBuyVolumeUSD
-                );
-
-                if (volumeResult.success) {
-                  volumeCompleted = volumeResult.volumeUSD;
-                }
-              } catch (error) {
-                console.error(
-                  `[CRON] Reconcile: Volume calc failed for ${pubkey.slice(0, 8)}...:`,
-                  error
-                );
+              if (account.outcome !== null && account.outcome !== undefined) {
+                outcome = account.outcome ? "won" : "lost";
               }
-
-              const targetVolumeUSD = Number(account.targetVolume) / 10 ** 9;
-              outcome = volumeCompleted >= targetVolumeUSD ? "won" : "lost";
+              if (account.volumeCompletedUsd) {
+                volumeCompleted = Number(account.volumeCompletedUsd) / 10 ** 9;
+              }
             }
 
             await prisma.deal.create({
@@ -710,7 +719,7 @@ export async function reconcileOnChainState() {
                 creator: account.creator.toBase58(),
                 token: account.token.toBase58(),
                 traderId: trader.id,
-                traderAddress: trader.address,
+                traderAddress: cleanAddress,
                 rewardAmount: Number(account.rewardAmount),
                 targetVolume: Number(account.targetVolume),
                 minBuyVolume: account.minBuyVolume
@@ -732,14 +741,18 @@ export async function reconcileOnChainState() {
 
             totalCreated++;
             console.log(
-              `[CRON] Reconcile: Created missing deal ${pubkey.slice(0, 8)}... for trader ${trader.address.slice(0, 8)}...`
+              `[CRON] Reconcile: Created missing deal ${pubkey.slice(0, 8)}... for trader ${trader.address.slice(0, 8)}... (outcome: ${outcome}, volume: ${volumeCompleted.toFixed(2)})`
             );
           } else if (dbDeal.isActive && !account.isActive) {
-            // Case 1: On-chain finalized but DB still says active — sync it
-            // We don't know the exact outcome from on-chain alone, so derive from volume
-            const targetVolumeUSD = Number(dbDeal.targetVolume) / 10 ** 9;
-            const volumeCompleted = Number(dbDeal.volumeCompleted || 0);
-            const outcome = volumeCompleted >= targetVolumeUSD ? "won" : "lost";
+            let volumeCompleted = 0;
+            let outcome: string | null = null;
+
+            if (account.outcome !== null && account.outcome !== undefined) {
+              outcome = account.outcome ? "won" : "lost";
+            }
+            if (account.volumeCompletedUsd) {
+              volumeCompleted = Number(account.volumeCompletedUsd) / 10 ** 9;
+            }
 
             await prisma.deal.update({
               where: { id: dbDeal.id },
@@ -747,6 +760,7 @@ export async function reconcileOnChainState() {
                 isActive: false,
                 finalizedAt: new Date(),
                 outcome: outcome,
+                volumeCompleted: volumeCompleted,
               },
             });
 
@@ -754,11 +768,64 @@ export async function reconcileOnChainState() {
 
             totalSynced++;
             console.log(
-              `[CRON] Reconcile: Synced finalized deal ${pubkey.slice(0, 8)}... → ${outcome}`
+              `[CRON] Reconcile: Synced finalized deal ${pubkey.slice(0, 8)}... → ${outcome} (volume: ${volumeCompleted.toFixed(2)})`
             );
+          } else if (dbDeal.isActive && account.isActive) {
+            const startTime = dbDeal.acceptedAt
+              ? Math.floor(dbDeal.acceptedAt.getTime() / 1000)
+              : Math.floor(dbDeal.createdAt.getTime() / 1000);
+            const minBuyVolumeUSD = dbDeal.minBuyVolume
+              ? Number(dbDeal.minBuyVolume) / 10 ** 9
+              : undefined;
+
+            try {
+              const volumeResult = await calculateTokenVolumeFast(
+                cleanAddress,
+                dbDeal.token,
+                startTime,
+                undefined,
+                minBuyVolumeUSD
+              );
+              if (volumeResult.success) {
+                await prisma.deal.update({
+                  where: { id: dbDeal.id },
+                  data: { volumeCompleted: volumeResult.volumeUSD },
+                });
+              }
+            } catch (error) {
+              console.error(
+                `[CRON] Reconcile: Volume update failed for active deal ${pubkey.slice(0, 8)}...:`,
+                error
+              );
+            }
+          } else if (!dbDeal.isActive && !account.isActive) {
+            let onChainOutcome: string | null = null;
+            let onChainVolume = 0;
+
+            if (account.outcome !== null && account.outcome !== undefined) {
+              onChainOutcome = account.outcome ? "won" : "lost";
+            }
+            if (account.volumeCompletedUsd) {
+              onChainVolume = Number(account.volumeCompletedUsd) / 10 ** 9;
+            }
+
+            const dbVolume = Number(dbDeal.volumeCompleted || 0);
+
+            if (onChainOutcome && (dbDeal.outcome !== onChainOutcome || Math.abs(onChainVolume - dbVolume) > 0.01)) {
+              await prisma.deal.update({
+                where: { id: dbDeal.id },
+                data: {
+                  volumeCompleted: onChainVolume,
+                  outcome: onChainOutcome,
+                },
+              });
+              totalSynced++;
+              console.log(
+                `[CRON] Reconcile: Fixed stale deal ${pubkey.slice(0, 8)}...: ${dbVolume.toFixed(2)} → ${onChainVolume.toFixed(2)}, ${dbDeal.outcome} → ${onChainOutcome}`
+              );
+            }
           }
 
-          // Small delay to avoid RPC rate limiting
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
       } catch (error) {
@@ -800,7 +867,6 @@ export async function markOrphanedDeals() {
 
   try {
     const now = new Date();
-    // Consider deals orphaned if they expired more than 1 hour ago and are still active
     const orphanThreshold = new Date(now.getTime() - 60 * 60 * 1000);
 
     const orphanedDeals = await prisma.deal.findMany({
@@ -864,7 +930,6 @@ export async function markOrphanedDeals() {
 export async function runCleanup() {
   console.log("[CRON] Starting cleanup of finalized deals...");
   try {
-    // Delete deals finalized more than 24 hours ago
     const deletedCount = await cleanupFinalizedDeals(24);
     console.log(`[CRON] Cleanup complete, deleted ${deletedCount} deals`);
   } catch (error) {
@@ -883,40 +948,32 @@ export function initCronJobs() {
 
   console.log("[CRON] Initializing cron jobs...");
 
-  // Deal finalization check - every minute
-  // This handles both deals ready to finalize and expired deals
   cron.schedule(FINALIZE_CHECK_INTERVAL, () => {
     checkAndFinalizeDeals().catch(console.error);
   });
-  console.log(`[CRON] Scheduled finalization check: ${FINALIZE_CHECK_INTERVAL}`);
 
-  // Trader stats sync - every 2 minutes (calculates deal volumes + aggregates trader stats)
   cron.schedule(TRADER_STATS_INTERVAL, () => {
     syncTraderStats().catch(console.error);
   });
-  console.log(`[CRON] Scheduled trader stats sync: ${TRADER_STATS_INTERVAL}`);
 
-  // Reconcile DB with on-chain state - every 5 minutes
   cron.schedule(RECONCILE_INTERVAL, () => {
     reconcileOnChainState().catch(console.error);
   });
-  console.log(`[CRON] Scheduled on-chain reconciliation: ${RECONCILE_INTERVAL}`);
 
-  // Mark orphaned deals - every hour (deals expired >1h ago that were never finalized)
   cron.schedule(CLEANUP_INTERVAL, () => {
     markOrphanedDeals().catch(console.error);
   });
-  console.log(`[CRON] Scheduled orphaned deal check: ${CLEANUP_INTERVAL}`);
 
-  // Cleanup old finalized deals - every hour (offset by 30 min)
   cron.schedule("30 * * * *", () => {
     runCleanup().catch(console.error);
   });
-  console.log(`[CRON] Scheduled cleanup: 30 * * * *`);
+
+  cron.schedule("0 9 * * *", () => {
+    sendDailySummaries().catch(console.error);
+  });
 
   isInitialized = true;
   console.log("[CRON] All cron jobs initialized successfully");
 }
 
-// Export the old function name for backwards compatibility
 export const checkExpiredDeals = checkAndFinalizeDeals;

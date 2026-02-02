@@ -7,6 +7,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useTraderDeals } from "@/hooks/useTraderDeals";
 import { useDealsForTrader, DealWithMetadata } from "@/hooks/useDealsForTrader";
 import { Clock, TrendingUp, Zap, Search, ArrowUpDown, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useBatchVolumeProgress } from "@/hooks/useBatchVolumeProgress";
 import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 
@@ -60,8 +61,65 @@ interface ProfileCardProps {
   isOwnProfile: boolean;
 }
 
+const TELEGRAM_BOT_USERNAME = "deals_notifs_bot";
+
 function ProfileCard({ walletAddress, traderName, traderImageUrl, activeBounties, volumeCompleted, volumeLoading, isOwnProfile }: ProfileCardProps) {
   const [imageError, setImageError] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState<"loading" | "linked" | "not_linked">("loading");
+
+  // Check if wallet is linked to Telegram
+  useEffect(() => {
+    if (!isOwnProfile) return;
+
+    async function checkTelegramStatus() {
+      try {
+        const res = await fetch(`/api/telegram/status?wallet=${walletAddress}`);
+        if (!res.ok) {
+          // API error (e.g. DB down) — keep loading state, don't flip to not_linked
+          console.error("[TG_STATUS] API returned", res.status);
+          return;
+        }
+        const data = await res.json();
+        setTelegramStatus(data.linked ? "linked" : "not_linked");
+      } catch {
+        // Network error — don't change state, keep whatever it was
+        console.error("[TG_STATUS] Network error checking telegram status");
+      }
+    }
+
+    checkTelegramStatus();
+  }, [walletAddress, isOwnProfile]);
+
+  const handleSyncTelegram = () => {
+    // Open Telegram deep link with wallet address
+    const deepLink = `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${walletAddress}`;
+    window.open(deepLink, "_blank");
+
+    toast.info("Opening Telegram...", {
+      description: "Complete verification in the bot, then return here to see updates.",
+      duration: 5000,
+    });
+
+    // Start polling for status change
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/telegram/status?wallet=${walletAddress}`);
+        const data = await res.json();
+        if (data.linked) {
+          setTelegramStatus("linked");
+          clearInterval(pollInterval);
+          toast.success("Telegram linked successfully!", {
+            description: "You'll now receive notifications for your deals.",
+          });
+        }
+      } catch {
+        // Ignore errors during polling
+      }
+    }, 3000);
+
+    // Stop polling after 5 minutes
+    setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+  };
 
   // Use trader's image if available, otherwise fallback to generated avatar
   const displayImage = traderImageUrl && !imageError
@@ -127,9 +185,31 @@ function ProfileCard({ walletAddress, traderName, traderImageUrl, activeBounties
             </div>
             {isOwnProfile && (
               <div className="flex items-center gap-2">
-                <button className="px-3 py-1.5 bg-white hover:bg-zinc-200 rounded-sm text-xs text-black font-medium transition-all cursor-pointer">
-                  Sync Telegram
-                </button>
+                {telegramStatus === "loading" ? (
+                  <button
+                    disabled
+                    className="px-3 py-1.5 bg-zinc-700 rounded-sm text-xs text-zinc-400 font-medium cursor-not-allowed"
+                  >
+                    Checking...
+                  </button>
+                ) : telegramStatus === "linked" ? (
+                  <button
+                    disabled
+                    className="px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-sm text-xs text-green-400 font-medium cursor-default flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    Telegram Linked
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSyncTelegram}
+                    className="px-3 py-1.5 bg-white hover:bg-zinc-200 rounded-sm text-xs text-black font-medium transition-all cursor-pointer"
+                  >
+                    Sync Telegram
+                  </button>
+                )}
                 <button className="px-3 py-1.5 bg-white hover:bg-zinc-200 rounded-sm text-xs text-black font-medium transition-all cursor-pointer">
                   Edit Profile
                 </button>
@@ -642,7 +722,30 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
     return null;
   }
 
-  // Filter deals based on active/completed status, search, and reward filter
+  // Unfiltered lists for lifetime stats (not affected by search/filter)
+  const { allActiveDeals, allCompletedDeals } = useMemo(() => {
+    const now = Date.now() / 1000;
+    const BUFFER_SEC = 60 * 60; // 60 minutes — matches cron finalization buffer
+
+    const active = deals.filter((deal) => {
+      if (!deal.isActive || !deal.isAccepted) return false;
+      const expiresAt = deal.createdAt.toNumber() + deal.expirationWindowInHours.toNumber() * 3600;
+      return now < expiresAt + BUFFER_SEC;
+    });
+
+    const completed = deals.filter((deal) => {
+      if (!deal.isAccepted) return false;
+      if (!deal.isActive) {
+        if (deal.outcome === "expired_unfulfilled") return false;
+        return true;
+      }
+      return false;
+    });
+
+    return { allActiveDeals: active, allCompletedDeals: completed };
+  }, [deals]);
+
+  // Filter deals based on active/completed status, search, and reward filter (for display)
   const { activeDeals, completedDeals } = useMemo(() => {
     const filterAndSort = (dealsList: DealWithMetadata[]) => {
       let filtered = dealsList;
@@ -697,28 +800,11 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
       return filtered;
     };
 
-    const now = Date.now() / 1000;
-    const BUFFER_SEC = 60 * 60; // 60 minutes — matches cron finalization buffer
-    const active = filterAndSort(deals.filter((deal) => {
-      if (!deal.isActive || !deal.isAccepted) return false;
-      // Hide orphaned deals (still isActive on-chain but past expiry + buffer)
-      const expiresAt = deal.createdAt.toNumber() + deal.expirationWindowInHours.toNumber() * 3600;
-      return now < expiresAt + BUFFER_SEC;
-    }));
-    const completed = filterAndSort(deals.filter((deal) => {
-      if (!deal.isAccepted) return false;
-      // Deals finalized on-chain (isActive: false)
-      if (!deal.isActive) {
-        // Exclude expired_unfulfilled deals — never finalized on-chain
-        if (deal.outcome === "expired_unfulfilled") return false;
-        return true;
-      }
-      // Still isActive but past expiry + buffer — cron should have finalized by now.
-      // If it hasn't, hide from both tabs (never-finalized deal).
-      return false;
-    }));
-    return { activeDeals: active, completedDeals: completed };
-  }, [deals, searchQuery, rewardFilter, sortBy]);
+    return {
+      activeDeals: filterAndSort(allActiveDeals),
+      completedDeals: filterAndSort(allCompletedDeals),
+    };
+  }, [allActiveDeals, allCompletedDeals, searchQuery, rewardFilter, sortBy]);
 
   // Helper to derive outcome for a deal (same logic as DealCard)
   const getDerivedOutcome = (deal: DealWithMetadata): "won" | "lost" | undefined => {
@@ -746,8 +832,9 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
 
   // Create volume requests for all active and completed deals (batch fetch in parallel)
   // Include minBuyVolume converted from USDC decimals to USD for filtering
+  // Volume requests for ALL deals (unfiltered) to calculate lifetime volume
   const volumeRequests = useMemo(() => {
-    const allDeals = [...activeDeals, ...completedDeals];
+    const allDeals = [...allActiveDeals, ...allCompletedDeals];
     return allDeals.map((deal) => ({
       walletAddress,
       tokenMint: deal.token.toBase58(),
@@ -755,17 +842,17 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
       minBuyVolume: deal.minBuyVolume ? deal.minBuyVolume.toNumber() / 10 ** USDC_DECIMALS : undefined,
       key: deal.publicKey.toBase58(),
     }));
-  }, [activeDeals, completedDeals, walletAddress]);
+  }, [allActiveDeals, allCompletedDeals, walletAddress]);
 
   // Batch fetch volumes for all deals in parallel
   const { volumes, loadingKeys } = useBatchVolumeProgress(volumeRequests, volumeRequests.length > 0);
 
-  // Calculate total volume completed
+  // Calculate total LIFETIME volume completed (uses unfiltered lists)
   const totalVolumeCompleted = useMemo(() => {
     let total = 0;
 
-    // For completed deals, use the actual volumeCompleted stored in DB
-    completedDeals.forEach((deal) => {
+    // For ALL completed deals, use the actual volumeCompleted stored in DB
+    allCompletedDeals.forEach((deal) => {
       // Use volumeCompleted if available (from DB), otherwise fall back to target for won deals
       if (deal.volumeCompleted !== undefined) {
         total += deal.volumeCompleted;
@@ -777,8 +864,8 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
       // For lost deals without volumeCompleted, we add 0 (they didn't complete the target)
     });
 
-    // For active deals, use actual tracked volume (if available)
-    activeDeals.forEach((deal) => {
+    // For ALL active deals, use actual tracked volume (if available)
+    allActiveDeals.forEach((deal) => {
       const dealKey = deal.publicKey.toBase58();
       const volumeData = volumes.get(dealKey);
       if (volumeData) {
@@ -787,7 +874,7 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
     });
 
     return total;
-  }, [activeDeals, completedDeals, volumes]);
+  }, [allActiveDeals, allCompletedDeals, volumes]);
 
   return (
     <main className="min-h-screen pt-24 px-6 bg-black pl-28">

@@ -9,7 +9,7 @@ import IDL from "../IDL.json";
 import { BountyExchangeProgram } from "../idl";
 
 export const PROGRAM_ID = new PublicKey(
-  "9c3ZGDTinPuGXxJGaN3QsNRBcDgkkjcsNgXgcoqoGW8D"
+  "5voynNZLcD5xDBmhfvegNK9ySLsjZRU4HdhmC5KQSaSi"
 );
 
 export const USDC_MINT = new PublicKey(

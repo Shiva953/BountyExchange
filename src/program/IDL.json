@@ -1,5 +1,5 @@
 {
-  "address": "9c3ZGDTinPuGXxJGaN3QsNRBcDgkkjcsNgXgcoqoGW8D",
+  "address": "5voynNZLcD5xDBmhfvegNK9ySLsjZRU4HdhmC5KQSaSi",
   "metadata": {
     "name": "bounty_exchange_program",
     "version": "0.1.0",
@@ -607,6 +607,18 @@
           {
             "name": "is_accepted",
             "type": "bool"
+          },
+          {
+            "name": "outcome",
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "volume_completed_usd",
+            "type": {
+              "option": "u64"
+            }
           }
         ]
       }

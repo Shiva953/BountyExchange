@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/bounty_exchange_program.json`.
  */
 export type BountyExchangeProgram = {
-  "address": "9c3ZGDTinPuGXxJGaN3QsNRBcDgkkjcsNgXgcoqoGW8D",
+  "address": "5voynNZLcD5xDBmhfvegNK9ySLsjZRU4HdhmC5KQSaSi",
   "metadata": {
     "name": "bountyExchangeProgram",
     "version": "0.1.0",
@@ -613,6 +613,18 @@ export type BountyExchangeProgram = {
           {
             "name": "isAccepted",
             "type": "bool"
+          },
+          {
+            "name": "outcome",
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "volumeCompletedUsd",
+            "type": {
+              "option": "u64"
+            }
           }
         ]
       }
