@@ -23,7 +23,7 @@ const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 500;
 const FINALIZE_MAX_RETRIES = 5;
 const FINALIZE_RETRY_DELAY_MS = 2000;
-const FINALIZATION_BUFFER_MS = 60 * 60 * 1000;
+const FINALIZATION_BUFFER_MS = 15 * 60 * 1000;
 
 let isInitialized = false;
 let isTraderStatsSyncRunning = false;
