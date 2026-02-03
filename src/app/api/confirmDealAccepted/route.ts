@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getProgram } from "@/program/instructions/createDeal";
 import { prisma } from "@/lib/prisma";
+import { registerTraderForWebhook } from "@/lib/helius-webhooks";
+import { cacheDealForWallet } from "@/lib/volume-cache";
 
 /**
  * Called by the frontend AFTER a deal acceptance transaction is confirmed on-chain.
@@ -162,6 +164,29 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`[CONFIRM] Deal synced successfully, expires at: ${expiresAt}`);
+
+    // Register trader with Helius webhook for real-time swap tracking
+    try {
+      await registerTraderForWebhook(traderAddress);
+      console.log(`[CONFIRM] Registered trader ${traderAddress.slice(0, 8)}... with Helius webhook`);
+    } catch (webhookError) {
+      // Non-fatal - webhook registration is best-effort
+      console.error(`[CONFIRM] Failed to register trader with webhook:`, webhookError);
+    }
+
+    // Cache deal for webhook lookup (enables real-time volume updates)
+    try {
+      await cacheDealForWallet(
+        traderAddress,
+        dealAccount.token.toBase58(),
+        dealPubkey,
+        Math.floor(now.getTime() / 1000),
+        expiresAt.getTime()
+      );
+      console.log(`[CONFIRM] Cached deal ${dealPubkey.slice(0, 8)}... for webhook processing`);
+    } catch (cacheError) {
+      console.error(`[CONFIRM] Failed to cache deal for wallet:`, cacheError);
+    }
 
     return NextResponse.json({
       success: true,

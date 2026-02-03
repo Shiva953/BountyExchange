@@ -8,6 +8,8 @@
 import { prisma } from "./prisma";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getProgram } from "@/program/instructions/createDeal";
+import { registerTraderForWebhook } from "./helius-webhooks";
+import { cacheDealForWallet } from "./volume-cache";
 
 /**
  * Syncs an accepted deal from on-chain to database.
@@ -83,6 +85,28 @@ export async function syncDealAccepted(dealPubkey: string) {
 
     // Update trader's active bounties count
     await updateTraderActiveBounties(trader.id);
+
+    // Register trader with Helius webhook for real-time swap tracking
+    try {
+      await registerTraderForWebhook(traderAddress);
+      console.log("[DEAL SYNC] Registered trader with Helius webhook");
+    } catch (webhookError) {
+      console.error("[DEAL SYNC] Failed to register trader with webhook:", webhookError);
+    }
+
+    // Cache deal for webhook lookup
+    try {
+      await cacheDealForWallet(
+        traderAddress,
+        dealAccount.token.toBase58(),
+        dealPubkey,
+        Math.floor(now.getTime() / 1000),
+        expiresAt.getTime()
+      );
+      console.log("[DEAL SYNC] Cached deal for webhook processing");
+    } catch (cacheError) {
+      console.error("[DEAL SYNC] Failed to cache deal:", cacheError);
+    }
 
     console.log("[DEAL SYNC] Deal synced, expires at:", expiresAt);
     return deal;

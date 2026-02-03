@@ -60,8 +60,8 @@ export async function GET(_request: NextRequest) {
 
     const tradersWithStats = traders.map((trader) => ({
       id: trader.id,
-      name: trader.name,
-      address: trader.address,
+      name: trader.name?.split('?')[0] || trader.name,
+      address: trader.address?.split('?')[0] || trader.address,
       imageUrl: trader.imageUrl,
       volumeCompleted: Number(trader.volumeCompleted || 0),
       activeBounties: trader.activeBounties || 0,

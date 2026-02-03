@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   calculateTokenVolume,
-  calculateTokenVolumeFast,
+  calculateTokenVolumeCached,
 } from "@/utils/calculateTokenVolume";
 
 export async function GET(request: NextRequest) {
@@ -41,10 +41,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const skipCache = searchParams.get("skipCache") === "true";
     const startTime = Date.now();
 
+    // Use cached version for fast mode (default), fall back to uncached for standard mode
     const result = useFast
-      ? await calculateTokenVolumeFast(walletAddress, tokenMint)
+      ? await calculateTokenVolumeCached(walletAddress, tokenMint, undefined, undefined, undefined, { skipCache })
       : await calculateTokenVolume(walletAddress, tokenMint, maxTxns);
 
     const duration = Date.now() - startTime;
@@ -121,11 +123,13 @@ export async function POST(request: NextRequest) {
     const filterStartTime = startTimeParam ? Number(startTimeParam) : undefined;
     const filterEndTime = endTimeParam ? Number(endTimeParam) : undefined;
     const minBuyVolumeUSD = minBuyVolumeParam ? Number(minBuyVolumeParam) : undefined;
+    const skipCache = body.skipCache === true;
 
     const apiStartTime = Date.now();
 
+    // Use cached version for fast mode (default), fall back to uncached for standard mode
     const result = fast
-      ? await calculateTokenVolumeFast(walletAddress, tokenMint, filterStartTime, filterEndTime, minBuyVolumeUSD)
+      ? await calculateTokenVolumeCached(walletAddress, tokenMint, filterStartTime, filterEndTime, minBuyVolumeUSD, { skipCache })
       : await calculateTokenVolume(walletAddress, tokenMint, maxTxns, filterStartTime, filterEndTime, minBuyVolumeUSD);
 
     const duration = Date.now() - apiStartTime;

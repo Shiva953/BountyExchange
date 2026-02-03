@@ -96,7 +96,7 @@ class KOLScanScraper {
         const $user = $(userEl);
         const accountLink = $user.find('a').first();
         const walletName = accountLink.find('h1').text().trim();
-        const walletAddress = accountLink.attr('href')?.split('/account/')[1] || '';
+        const walletAddress = accountLink.attr('href')?.split('/account/')[1]?.split('?')[0] || '';
         const walletAvatar = accountLink.find('img').attr('src') || '';
         const accountName = $user.find('p.remove-mobile').text().trim();
 

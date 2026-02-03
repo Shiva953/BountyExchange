@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 interface VolumeData {
   volumeUSD: number;
   totalVolume: number;
   totalSwapTransactions: number;
   tokenPrice: number | null;
+  progress?: number; // Percentage progress towards target
+  lastUpdated?: number; // Timestamp of last update
+  isStale?: boolean; // True if this is cached data being revalidated
 }
 
 interface VolumeRequest {
@@ -15,6 +18,7 @@ interface VolumeRequest {
   startTime?: number;
   minBuyVolume?: number; // Minimum buy volume in USD - only count swaps >= this value
   key: string; // unique identifier for this request (e.g., dealPubkey)
+  targetVolume?: number; // Target volume for progress calculation
 }
 
 interface BatchVolumeResult {
@@ -23,9 +27,17 @@ interface BatchVolumeResult {
   loadingKeys: Set<string>;
   errors: Map<string, string>;
   refetch: () => void;
+  sseConnected: boolean; // Whether SSE is connected for real-time updates
+  isRevalidating: boolean; // True when refreshing stale data in background
 }
 
 const BATCH_SIZE = 10; // Send up to 10 requests per batch API call
+const POLL_INTERVAL = 5000; // Poll every 5 seconds
+
+// NOTE: Removed localStorage caching - it was causing stale data bugs where
+// cached values would override fresh data. The hook now only preserves data
+// within the same session (no page refresh persistence).
+// Stale-while-revalidate now only applies to refetch() calls within same session.
 
 export function useBatchVolumeProgress(
   requests: VolumeRequest[],
@@ -35,18 +47,32 @@ export function useBatchVolumeProgress(
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
+  const [isRevalidating, setIsRevalidating] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const fetchedKeysRef = useRef<Set<string>>(new Set());
+  const targetVolumeMap = useRef(new Map<string, number>());
 
-  const fetchVolumes = useCallback(async () => {
+  // Memoize deal keys
+  const dealPublicKeys = useMemo(() => requests.map((r) => r.key), [requests]);
+
+  // Update target volume map when requests change
+  useEffect(() => {
+    for (const req of requests) {
+      if (req.targetVolume) {
+        targetVolumeMap.current.set(req.key, req.targetVolume);
+      }
+    }
+  }, [requests]);
+
+  const fetchVolumes = useCallback(async (forceRevalidate = false) => {
     if (!enabled || requests.length === 0) {
       return;
     }
 
-    // Filter out already fetched requests
-    const pendingRequests = requests.filter(
-      (req) => !fetchedKeysRef.current.has(req.key)
-    );
+    // Filter out already fetched requests (unless force revalidating)
+    const pendingRequests = forceRevalidate
+      ? requests
+      : requests.filter((req) => !fetchedKeysRef.current.has(req.key));
 
     if (pendingRequests.length === 0) {
       return;
@@ -58,8 +84,21 @@ export function useBatchVolumeProgress(
     }
     abortControllerRef.current = new AbortController();
 
-    setLoading(true);
-    setLoadingKeys(new Set(pendingRequests.map((r) => r.key)));
+    // If we have cached data, this is a revalidation (background refresh)
+    const hasCachedData = pendingRequests.some((req) => volumes.has(req.key));
+    if (hasCachedData && forceRevalidate) {
+      setIsRevalidating(true);
+    } else {
+      setLoading(true);
+    }
+
+    // Only show loading indicators for keys without cached data
+    const keysWithoutCache = pendingRequests
+      .filter((req) => !volumes.has(req.key))
+      .map((r) => r.key);
+    if (keysWithoutCache.length > 0) {
+      setLoadingKeys(new Set(keysWithoutCache));
+    }
 
     // Split into batches for the batch API
     const batches: VolumeRequest[][] = [];
@@ -105,14 +144,18 @@ export function useBatchVolumeProgress(
         for (const item of result.results) {
           if (item.success && item.data) {
             fetchedKeysRef.current.add(item.key);
+            const volumeData: VolumeData = {
+              volumeUSD: item.data.volumeUSD,
+              totalVolume: item.data.totalVolume,
+              totalSwapTransactions: item.data.totalSwapTransactions,
+              tokenPrice: item.data.tokenPrice,
+              lastUpdated: Date.now(),
+              isStale: false,
+            };
+
             setVolumes((prev) => {
               const newMap = new Map(prev);
-              newMap.set(item.key, {
-                volumeUSD: item.data.volumeUSD,
-                totalVolume: item.data.totalVolume,
-                totalSwapTransactions: item.data.totalSwapTransactions,
-                tokenPrice: item.data.tokenPrice,
-              });
+              newMap.set(item.key, volumeData);
               return newMap;
             });
           } else {
@@ -157,24 +200,117 @@ export function useBatchVolumeProgress(
     }
 
     setLoading(false);
-  }, [requests, enabled]);
+    setIsRevalidating(false);
+  }, [requests, enabled, volumes]);
 
   // Fetch when requests change (new keys added)
   useEffect(() => {
     const hasNewKeys = requests.some((r) => !fetchedKeysRef.current.has(r.key));
 
     if (hasNewKeys) {
-      fetchVolumes();
+      fetchVolumes(false);
     }
   }, [requests, fetchVolumes]);
 
   const refetch = useCallback(() => {
-    // Clear cached keys to force refetch
+    // Stale-while-revalidate: keep showing current data while refreshing
+    // Don't clear volumes - show stale data while revalidating
     fetchedKeysRef.current.clear();
-    setVolumes(new Map());
     setErrors(new Map());
-    fetchVolumes();
+    fetchVolumes(true); // Force revalidate
   }, [fetchVolumes]);
+
+  // Polling for real-time updates - only when tab is visible
+  useEffect(() => {
+    if (!enabled || dealPublicKeys.length === 0) return;
+
+    let intervalId: NodeJS.Timeout | null = null;
+    let isVisible = true;
+
+    const pollVolumes = async () => {
+      // Skip if tab is not visible
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/deals/volumes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dealPublicKeys }),
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (!data.success || !data.volumes) return;
+
+        // Update volumes from DB - only if something changed
+        setVolumes((prev) => {
+          let hasChanges = false;
+
+          for (const item of data.volumes) {
+            const existing = prev.get(item.publicKey);
+            if (!existing || existing.volumeUSD !== item.volumeCompleted) {
+              hasChanges = true;
+              break;
+            }
+          }
+
+          // Return same reference if nothing changed (prevents re-render)
+          if (!hasChanges) return prev;
+
+          const newMap = new Map(prev);
+          for (const item of data.volumes) {
+            const existing = newMap.get(item.publicKey);
+            const targetVolume = targetVolumeMap.current.get(item.publicKey) || 0;
+            const progress = targetVolume > 0 ? (item.volumeCompleted / targetVolume) * 100 : 0;
+
+            if (!existing || existing.volumeUSD !== item.volumeCompleted) {
+              newMap.set(item.publicKey, {
+                volumeUSD: item.volumeCompleted,
+                totalVolume: existing?.totalVolume || 0,
+                totalSwapTransactions: existing?.totalSwapTransactions || 0,
+                tokenPrice: existing?.tokenPrice || null,
+                progress,
+                lastUpdated: Date.now(),
+              });
+            }
+          }
+          return newMap;
+        });
+      } catch {
+        // Silently fail - polling is best-effort
+      }
+    };
+
+    // Handle visibility change
+    const handleVisibilityChange = () => {
+      isVisible = document.visibilityState === "visible";
+      if (isVisible) {
+        // Poll immediately when tab becomes visible
+        pollVolumes();
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
+    // Start polling
+    intervalId = setInterval(pollVolumes, POLL_INTERVAL);
+
+    // Initial poll after a short delay
+    const timeoutId = setTimeout(pollVolumes, 2000);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      clearTimeout(timeoutId);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+    };
+  }, [enabled, dealPublicKeys]);
 
   return {
     volumes,
@@ -182,5 +318,7 @@ export function useBatchVolumeProgress(
     loadingKeys,
     errors,
     refetch,
+    sseConnected: false, // SSE disabled, using polling instead
+    isRevalidating, // True when refreshing cached data in background
   };
 }

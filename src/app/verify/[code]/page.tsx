@@ -28,7 +28,6 @@ export default function VerifyPage() {
   const [error, setError] = useState<string>("");
   const [expectedWallet, setExpectedWallet] = useState<string>("");
 
-  // Check if the verification code is valid
   useEffect(() => {
     async function checkCode() {
       try {
@@ -64,10 +63,9 @@ export default function VerifyPage() {
       return;
     }
 
-    // Check if connected wallet matches expected wallet
     if (publicKey.toBase58() !== expectedWallet) {
       setError(
-        `Wrong wallet connected. Please connect the wallet: ${expectedWallet.slice(0, 6)}...${expectedWallet.slice(-4)}`
+        `Wrong wallet. Connect: ${expectedWallet.slice(0, 6)}...${expectedWallet.slice(-4)}`
       );
       return;
     }
@@ -100,18 +98,13 @@ export default function VerifyPage() {
       if (!response.ok) {
         setStatus("error");
         setError(data.error || "Verification failed");
-        toast.error("Verification failed", {
-          description: data.error || "Please try again",
-        });
+        toast.error("Verification failed");
         return;
       }
 
       setStatus("success");
-      toast.success("Telegram linked successfully!", {
-        description: "You'll now receive notifications for your deals.",
-      });
+      toast.success("Telegram linked!");
 
-      // Redirect to deals page after a delay
       setTimeout(() => {
         router.push(`/${expectedWallet}/deals`);
       }, 2000);
@@ -119,17 +112,14 @@ export default function VerifyPage() {
       setStatus("error");
       const errorMsg = err instanceof Error ? err.message : "Signing failed";
       setError(errorMsg);
-      toast.error("Signing failed", {
-        description: "Please try again",
-      });
+      toast.error("Signing failed");
     }
   };
 
-  // Reset error when wallet changes
   useEffect(() => {
     if (publicKey && expectedWallet && publicKey.toBase58() !== expectedWallet) {
       setError(
-        `Wrong wallet. Please connect: ${expectedWallet.slice(0, 6)}...${expectedWallet.slice(-4)}`
+        `Wrong wallet. Connect: ${expectedWallet.slice(0, 6)}...${expectedWallet.slice(-4)}`
       );
     } else {
       setError("");
@@ -137,157 +127,110 @@ export default function VerifyPage() {
   }, [publicKey, expectedWallet]);
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-[#111] border border-[#222] rounded-xl p-8">
-        <h1 className="text-2xl font-semibold text-white text-center mb-2">
-          Link Telegram Account
-        </h1>
-        <p className="text-[#888] text-center mb-8">
-          Sign a message to verify wallet ownership
-        </p>
+    <div className="fixed inset-0 bg-black/95 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="w-full h-full flex flex-col items-center justify-center px-6">
 
-        {/* Loading State */}
         {status === "loading" && (
-          <div className="flex flex-col items-center py-8">
-            <Loader2 className="w-8 h-8 text-[#888] animate-spin" />
-            <p className="text-[#888] mt-4">Checking verification code...</p>
+          <div className="flex flex-col items-center">
+            <Loader2 className="w-10 h-10 text-[#666] animate-spin" />
           </div>
         )}
 
-        {/* Invalid Code */}
         {status === "invalid" && (
-          <div className="flex flex-col items-center py-8">
-            <XCircle className="w-12 h-12 text-red-500" />
-            <p className="text-white mt-4 font-medium">Invalid Code</p>
-            <p className="text-[#888] mt-2 text-center">
-              This verification link is invalid or has already been used.
+          <div className="flex flex-col items-center text-center">
+            <XCircle className="w-16 h-16 text-red-500 mb-6" />
+            <h1 className="text-3xl font-semibold tracking-tight text-white">Invalid Code</h1>
+            <p className="text-[#888] mt-3 text-lg">
+              This link is invalid or has already been used.
             </p>
           </div>
         )}
 
-        {/* Expired Code */}
         {status === "expired" && (
-          <div className="flex flex-col items-center py-8">
-            <AlertCircle className="w-12 h-12 text-yellow-500" />
-            <p className="text-white mt-4 font-medium">Code Expired</p>
-            <p className="text-[#888] mt-2 text-center">
-              This verification code has expired. Please request a new one from
-              the Telegram bot.
+          <div className="flex flex-col items-center text-center">
+            <AlertCircle className="w-16 h-16 text-yellow-500 mb-6" />
+            <h1 className="text-3xl font-semibold tracking-tight text-white">Code Expired</h1>
+            <p className="text-[#888] mt-3 text-lg">
+              Request a new one from the Telegram bot.
             </p>
           </div>
         )}
 
-        {/* Ready to Verify */}
         {status === "ready" && (
-          <div className="space-y-6">
-            <div className="bg-[#1a1a1a] rounded-lg p-4">
-              <p className="text-[#888] text-sm mb-1">Wallet to verify:</p>
-              <p className="text-white font-mono text-sm break-all">
-                {expectedWallet}
-              </p>
-            </div>
+          <div className="flex flex-col items-center text-center max-w-sm w-full">
+            <h1 className="text-4xl font-semibold tracking-tight text-white mb-2">
+              Verify Wallet
+            </h1>
+            <p className="text-[#888] text-base tracking-tight mb-10">
+              Sign a message to link Telegram
+            </p>
 
             {!connected ? (
-              <div className="flex flex-col items-center gap-4">
-                <p className="text-[#888] text-sm">
-                  Connect your wallet to continue
-                </p>
-                <WalletMultiButton />
-              </div>
+              <WalletMultiButton />
             ) : (
               <button
                 onClick={handleVerify}
                 disabled={!publicKey || publicKey.toBase58() !== expectedWallet}
-                className="w-full bg-white text-black font-medium py-3 px-4 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-white text-black font-semibold text-lg tracking-tight py-4 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Sign & Verify
               </button>
             )}
 
             {error && (
-              <p className="text-red-400 text-sm text-center">{error}</p>
+              <p className="text-red-400 text-sm mt-4">{error}</p>
             )}
           </div>
         )}
 
-        {/* Signing State */}
         {status === "signing" && (
-          <div className="flex flex-col items-center py-8">
-            <Loader2 className="w-8 h-8 text-white animate-spin" />
-            <p className="text-white mt-4">Waiting for signature...</p>
-            <p className="text-[#888] mt-2 text-sm">
-              Please approve the message in your wallet
+          <div className="flex flex-col items-center text-center">
+            <Loader2 className="w-10 h-10 text-white animate-spin mb-6" />
+            <h1 className="text-3xl font-semibold tracking-tight text-white">
+              Waiting for signature...
+            </h1>
+            <p className="text-[#888] mt-3 text-lg">
+              Approve in your wallet
             </p>
           </div>
         )}
 
-        {/* Verifying State */}
         {status === "verifying" && (
-          <div className="flex flex-col items-center py-8">
-            <Loader2 className="w-8 h-8 text-white animate-spin" />
-            <p className="text-white mt-4">Verifying signature...</p>
+          <div className="flex flex-col items-center text-center">
+            <Loader2 className="w-10 h-10 text-white animate-spin mb-6" />
+            <h1 className="text-3xl font-semibold tracking-tight text-white">Verifying...</h1>
           </div>
         )}
 
-        {/* Success State */}
         {status === "success" && (
-          <div className="flex flex-col items-center py-8">
-            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
-              <CheckCircle className="w-10 h-10 text-green-500" />
+          <div className="flex flex-col items-center text-center">
+            <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mb-6">
+              <CheckCircle className="w-12 h-12 text-green-500" />
             </div>
-            <p className="text-white text-xl font-semibold">Wallet Linked!</p>
-            <p className="text-[#888] mt-3 text-center">
-              Your wallet is now connected to Telegram.
-            </p>
-            <div className="mt-4 bg-[#1a1a1a] rounded-lg p-4 w-full">
-              <p className="text-[#888] text-sm text-center">
-                You&apos;ll receive notifications for:
-              </p>
-              <ul className="mt-2 space-y-1 text-sm text-white">
-                <li className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span> Volume milestones (25%, 50%, 75%, 90%)
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span> Expiry warnings (24h, 6h, 1h)
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span> Win/loss results
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span> Daily summary
-                </li>
-              </ul>
-            </div>
-            <p className="text-[#666] mt-4 text-sm flex items-center gap-2">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Redirecting to your deals...
+            <h1 className="text-4xl font-semibold tracking-tight text-white">Wallet Linked</h1>
+            <p className="text-[#888] mt-4 text-lg flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Redirecting...
             </p>
           </div>
         )}
 
-        {/* Error State */}
         {status === "error" && (
-          <div className="flex flex-col items-center py-8">
-            <XCircle className="w-12 h-12 text-red-500" />
-            <p className="text-white mt-4 font-medium">Verification Failed</p>
-            <p className="text-red-400 mt-2 text-center">{error}</p>
+          <div className="flex flex-col items-center text-center">
+            <XCircle className="w-16 h-16 text-red-500 mb-6" />
+            <h1 className="text-3xl font-semibold tracking-tight text-white">
+              Verification Failed
+            </h1>
+            <p className="text-red-400 mt-3 text-lg">{error}</p>
             <button
               onClick={() => setStatus("ready")}
-              className="mt-4 text-[#888] hover:text-white transition-colors"
+              className="mt-6 text-[#888] hover:text-white transition-colors text-lg cursor-pointer"
             >
               Try Again
             </button>
           </div>
         )}
 
-        {/* Code Display */}
-        {(status === "ready" || status === "error") && (
-          <div className="mt-6 pt-6 border-t border-[#222]">
-            <p className="text-[#666] text-xs text-center">
-              Verification code: <span className="font-mono">{code}</span>
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

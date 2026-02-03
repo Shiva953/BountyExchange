@@ -9,7 +9,7 @@ import { fetchTokenMetadata } from "@/utils/tokenMetadata";
 import { calculateTokenVolumeFast } from "@/utils/calculateTokenVolume";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://devnet.helius-rpc.com/?api-key=017f56ed-c6c1-480a-8c11-dbc09ab2358d";
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://devnet.helius-rpc.com/?api-key=e8dd8baa-d6a6-4cae-a097-3cd6cdcef462";
 const BOT_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 interface TelegramUpdate {
@@ -100,6 +100,27 @@ async function editMessage(
   } catch (error) {
     console.error("[TG_BOT] Error editing message:", error);
   }
+}
+
+const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"];
+
+function createLoadingSpinner(chatId: string, messageId: number) {
+  let frameIndex = 0;
+  let stopped = false;
+
+  const interval = setInterval(async () => {
+    if (stopped) return;
+    const frame = SPINNER_FRAMES[frameIndex % SPINNER_FRAMES.length];
+    await editMessage(chatId, messageId, `${frame} <i>Loading...</i>`);
+    frameIndex++;
+  }, 400);
+
+  return {
+    stop: () => {
+      stopped = true;
+      clearInterval(interval);
+    },
+  };
 }
 
 function generateVerifyCode(): string {
@@ -256,8 +277,12 @@ async function handleStatus(telegramUserId: string) {
 
   const loadingResult = await sendToUser(
     telegramUserId,
-    `🔄 <i>Fetching your deals from on-chain...</i>`
+    `◐ <i>Loading...</i>`
   );
+
+  const spinner = loadingResult.messageId
+    ? createLoadingSpinner(telegramUserId, loadingResult.messageId)
+    : null;
 
   const allTraderDeals = await fetchDealsForTrader(walletAddress);
 
@@ -268,6 +293,7 @@ async function handleStatus(telegramUserId: string) {
   console.log(`[TG_BOT:STATUS] Deals for ${walletAddress.slice(0, 8)}...: ${activeDeals.length} active, ${expiredPending.length} expired-pending, ${finalizedDeals.length} finalized`);
 
   if (activeDeals.length === 0 && expiredPending.length === 0 && finalizedDeals.length === 0) {
+    spinner?.stop();
     if (loadingResult.messageId) {
       try {
         await fetch(`${BOT_API}/deleteMessage`, {
@@ -319,6 +345,7 @@ async function handleStatus(telegramUserId: string) {
     }
   }
 
+  spinner?.stop();
   if (loadingResult.messageId) {
     try {
       await fetch(`${BOT_API}/deleteMessage`, {
@@ -524,10 +551,22 @@ async function handleCallbackQuery(query: {
   }
 
   const emoji = newValue ? "✅" : "❌";
-  await sendToUser(
+  const confirmResult = await sendToUser(
     telegramUserId,
     `${emoji} <b>${settingName}</b> is now <b>${statusText}</b>`
   );
+
+  if (confirmResult.messageId) {
+    setTimeout(async () => {
+      try {
+        await fetch(`${BOT_API}/deleteMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: telegramUserId, message_id: confirmResult.messageId }),
+        });
+      } catch {}
+    }, 5000);
+  }
 }
 
 interface OnChainDeal {
@@ -630,12 +669,16 @@ async function fetchAvailableBountiesOnChain(walletAddress: string): Promise<OnC
   let skippedInactive = 0;
   let skippedAccepted = 0;
   let skippedNotTargeted = 0;
+  let skippedExpired = 0;
 
   const available: OnChainDeal[] = [];
+  const now = new Date();
 
   for (const deal of allDeals) {
     if (!deal.isActive) { skippedInactive++; continue; }
     if (deal.isAccepted) { skippedAccepted++; continue; }
+    // Skip expired bounties that were never accepted
+    if (deal.expiresAt < now) { skippedExpired++; continue; }
     // Only show bounties targeted at this specific trader
     if (deal.trader !== walletAddress) { skippedNotTargeted++; continue; }
 
@@ -643,7 +686,7 @@ async function fetchAvailableBountiesOnChain(walletAddress: string): Promise<OnC
     available.push(deal);
   }
 
-  console.log(`[TG_BOT:BOUNTIES] Filter summary: ${available.length} available | ${skippedInactive} inactive | ${skippedAccepted} already accepted | ${skippedNotTargeted} not targeted at this trader`);
+  console.log(`[TG_BOT:BOUNTIES] Filter summary: ${available.length} available | ${skippedInactive} inactive | ${skippedAccepted} already accepted | ${skippedExpired} expired | ${skippedNotTargeted} not targeted at this trader`);
 
   // Sort by reward amount descending
   available.sort((a, b) => b.rewardAmount - a.rewardAmount);
@@ -692,13 +735,18 @@ async function handleBounties(telegramUserId: string) {
   console.log(`[TG_BOT:BOUNTIES] /bounties command from user ${telegramUserId} (wallet ${walletAddress.slice(0, 8)}...)`);
   const loadingResult = await sendToUser(
     telegramUserId,
-    `🔄 <i>Fetching your available bounties from on-chain...</i>`
+    `◐ <i>Loading...</i>`
   );
+
+  const spinner = loadingResult.messageId
+    ? createLoadingSpinner(telegramUserId, loadingResult.messageId)
+    : null;
 
   const bounties = await fetchAvailableBountiesOnChain(walletAddress);
 
   console.log(`[TG_BOT:BOUNTIES] /bounties found ${bounties.length} available bounties`);
 
+  spinner?.stop();
   if (loadingResult.messageId) {
     try {
       await fetch(`${BOT_API}/deleteMessage`, {
@@ -718,7 +766,7 @@ async function handleBounties(telegramUserId: string) {
       {
         replyMarkup: {
           inline_keyboard: [
-            [{ text: "🌐 Browse on Website", url: baseUrl }],
+            [{ text: "🌐 Open in App", url: baseUrl }],
           ],
         },
       }
@@ -747,7 +795,7 @@ async function handleBounties(telegramUserId: string) {
     {
       replyMarkup: {
         inline_keyboard: [
-          [{ text: "🌐 View All on Website", url: baseUrl }],
+          [{ text: "🌐 Open in App", url: baseUrl }],
         ],
       },
     }

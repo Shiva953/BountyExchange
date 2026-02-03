@@ -5,7 +5,7 @@ export interface TokenMetadata {
 }
 
 const HELIUS_MAINNET_RPC =
-  "https://mainnet.helius-rpc.com/?api-key=017f56ed-c6c1-480a-8c11-dbc09ab2358d";
+  "https://mainnet.helius-rpc.com/?api-key=e8dd8baa-d6a6-4cae-a097-3cd6cdcef462";
 const JUPITER_TOKEN_API = "https://lite-api.jup.ag/tokens/v1/token";
 
 async function fetchTokenMetadataFromJupiter(

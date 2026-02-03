@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { calculateTokenVolumeFast } from "@/utils/calculateTokenVolume";
+import { calculateTokenVolumeCached } from "@/utils/calculateTokenVolume";
 
 interface VolumeRequest {
   wallet: string;
@@ -25,8 +25,10 @@ interface VolumeResult {
   error?: string;
 }
 
-const MAX_CONCURRENT = 3;
-const DELAY_BETWEEN_BATCHES_MS = 100;
+// Increased from 3 to 10 for better throughput
+// Each calculation now uses internal parallelization, so we can handle more concurrent requests
+const MAX_CONCURRENT = 10;
+const DELAY_BETWEEN_BATCHES_MS = 50;
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,7 +68,7 @@ export async function POST(request: NextRequest) {
           const filterEndTime = req.endTime ? Number(req.endTime) : undefined;
           const minBuyVolumeUSD = req.minBuyVolume ? Number(req.minBuyVolume) : undefined;
 
-          const result = await calculateTokenVolumeFast(
+          const result = await calculateTokenVolumeCached(
             req.wallet,
             req.token,
             filterStartTime,
