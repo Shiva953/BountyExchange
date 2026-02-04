@@ -122,7 +122,7 @@ function apiDealToCreatedDeal(
     expirationWindowInHours: new BN(apiDeal.expirationHours),
     holdDurationInHours: new BN(apiDeal.holdDurationHours),
     escrowVault: new PublicKey(apiDeal.escrowVault),
-    bump: 0, // Not available from API, not needed for display
+    bump: 0,
     createdAt: new BN(Math.floor(new Date(apiDeal.createdAt).getTime() / 1000)),
     isActive: apiDeal.isActive,
     isAccepted: apiDeal.isAccepted,

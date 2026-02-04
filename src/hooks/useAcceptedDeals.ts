@@ -14,7 +14,6 @@ export function useAcceptedDeals(walletAddress: string | null) {
   const [error, setError] = useState<string | null>(null);
   const previousWalletRef = useRef<string | null>(null);
 
-  // Clear deals immediately when wallet address changes
   useEffect(() => {
     if (previousWalletRef.current !== walletAddress) {
       setDeals([]);

@@ -830,19 +830,17 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
 
   const displayedDeals = activeTab === "active" ? activeDeals : filteredCompletedDeals;
 
-  // Create volume requests for all active and completed deals (batch fetch in parallel)
-  // Include minBuyVolume converted from USDC decimals to USD for filtering
-  // Volume requests for ALL deals (unfiltered) to calculate lifetime volume
+  // Volume requests for active deals only - completed deals already have volumeCompleted in DB
   const volumeRequests = useMemo(() => {
-    const allDeals = [...allActiveDeals, ...allCompletedDeals];
-    return allDeals.map((deal) => ({
+    return allActiveDeals.map((deal) => ({
       walletAddress,
       tokenMint: deal.token.toBase58(),
       startTime: deal.createdAt.toNumber(),
       minBuyVolume: deal.minBuyVolume ? deal.minBuyVolume.toNumber() / 10 ** USDC_DECIMALS : undefined,
       key: deal.publicKey.toBase58(),
+      targetVolume: Number(deal.targetVolume) / 10 ** USDC_DECIMALS,
     }));
-  }, [allActiveDeals, allCompletedDeals, walletAddress]);
+  }, [allActiveDeals, walletAddress]);
 
   // Batch fetch volumes for all deals in parallel
   const { volumes, loadingKeys } = useBatchVolumeProgress(volumeRequests, volumeRequests.length > 0);

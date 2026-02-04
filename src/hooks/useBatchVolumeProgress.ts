@@ -52,10 +52,8 @@ export function useBatchVolumeProgress(
   const fetchedKeysRef = useRef<Set<string>>(new Set());
   const targetVolumeMap = useRef(new Map<string, number>());
 
-  // Memoize deal keys
   const dealPublicKeys = useMemo(() => requests.map((r) => r.key), [requests]);
 
-  // Update target volume map when requests change
   useEffect(() => {
     for (const req of requests) {
       if (req.targetVolume) {
@@ -78,23 +76,63 @@ export function useBatchVolumeProgress(
       return;
     }
 
+    // Seed initial values from DB (fast) before running slow Helius calculation
+    const dbSeededKeys = new Set<string>();
+    if (!forceRevalidate) {
+      try {
+        const dbKeys = pendingRequests.map((r) => r.key);
+        const dbResponse = await fetch("/api/deals/volumes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dealPublicKeys: dbKeys }),
+        });
+        if (dbResponse.ok) {
+          const dbData = await dbResponse.json();
+          if (dbData.success && dbData.volumes) {
+            setVolumes((prev) => {
+              const newMap = new Map(prev);
+              for (const item of dbData.volumes) {
+                if (item.volumeCompleted > 0 && !newMap.has(item.publicKey)) {
+                  const targetVolume = targetVolumeMap.current.get(item.publicKey) || 0;
+                  const progress = targetVolume > 0 ? (item.volumeCompleted / targetVolume) * 100 : 0;
+                  newMap.set(item.publicKey, {
+                    volumeUSD: item.volumeCompleted,
+                    totalVolume: 0,
+                    totalSwapTransactions: 0,
+                    tokenPrice: null,
+                    progress,
+                    lastUpdated: Date.now(),
+                    isStale: true,
+                  });
+                  dbSeededKeys.add(item.publicKey);
+                }
+              }
+              return newMap;
+            });
+          }
+        }
+      } catch {
+        // DB seed failed, continue with Helius batch
+      }
+    }
+
     // Cancel any ongoing requests
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
 
-    // If we have cached data, this is a revalidation (background refresh)
-    const hasCachedData = pendingRequests.some((req) => volumes.has(req.key));
-    if (hasCachedData && forceRevalidate) {
+    // If we have cached data (from DB seed or previous fetch), this is a revalidation
+    const hasCachedData = dbSeededKeys.size > 0 || pendingRequests.some((req) => volumes.has(req.key));
+    if (hasCachedData || forceRevalidate) {
       setIsRevalidating(true);
     } else {
       setLoading(true);
     }
 
-    // Only show loading indicators for keys without cached data
+    // Only show loading indicators for keys without cached data (including DB seed)
     const keysWithoutCache = pendingRequests
-      .filter((req) => !volumes.has(req.key))
+      .filter((req) => !volumes.has(req.key) && !dbSeededKeys.has(req.key))
       .map((r) => r.key);
     if (keysWithoutCache.length > 0) {
       setLoadingKeys(new Set(keysWithoutCache));
