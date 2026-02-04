@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction } from "@solana/web3.js";
+import { sendTransactionWithRetry } from "@/utils/sendTransactionWithRetry";
 import { getProgram } from "@/program/instructions/createDeal";
 import { ArrowLeft, Clock, Target, Calendar, Check, Loader2, ArrowUpRight, RefreshCw } from "lucide-react";
 import { useVolumeProgress } from "@/hooks/useVolumeProgress";
@@ -214,9 +215,18 @@ export default function DealPage() {
 
       const transaction = Transaction.from(Buffer.from(data.transaction, "base64"));
       const signedTransaction = await signTransaction(transaction);
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize());
 
-      await connection.confirmTransaction(signature, "confirmed");
+      const result = await sendTransactionWithRetry(
+        connection,
+        signedTransaction,
+        data.lastValidBlockHeight
+      );
+
+      if (!result.success) {
+        throw new Error(`Transaction failed: error code ${result.errorCode}`);
+      }
+
+      const signature = result.signature;
 
       // Sync the accepted deal to the database
       try {

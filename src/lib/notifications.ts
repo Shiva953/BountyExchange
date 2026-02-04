@@ -294,10 +294,6 @@ export async function sendFinalizationNotification(
       `<b>Volume:</b> $${formatUSD(deal.volumeCompleted)} / $${formatUSD(deal.targetVolume)}\n\n` +
       `💰 <b>Reward Earned: $${formatUSD(deal.rewardAmount)}</b>\n\n` +
       `Funds have been transferred to your wallet!`;
-
-    if (txSignature) {
-      message += `\n\n<a href="https://explorer.solana.com/tx/${txSignature}?cluster=devnet">View Transaction</a>`;
-    }
   } else {
     const failBar = "🟥".repeat(Math.min(10, Math.floor(percent / 10))) + "⬛".repeat(10 - Math.min(10, Math.floor(percent / 10)));
     message =
@@ -310,7 +306,15 @@ export async function sendFinalizationNotification(
       `Better luck next time — more bounties are waiting.`;
   }
 
-  const result = await sendToUser(trader.telegramUserId, message);
+  const replyMarkup = txSignature
+    ? {
+        inline_keyboard: [
+          [{ text: "View Transaction", url: `https://explorer.solana.com/tx/${txSignature}?cluster=devnet` }],
+        ],
+      }
+    : undefined;
+
+  const result = await sendToUser(trader.telegramUserId, message, { replyMarkup });
 
   if (result.success) {
     await recordNotification(deal.traderId, deal.id, type as NotificationType, result.messageId);

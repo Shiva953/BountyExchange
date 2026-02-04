@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Transaction } from "@solana/web3.js";
+import { sendTransactionWithRetry } from "@/utils/sendTransactionWithRetry";
 import { ArrowLeft, ArrowUpRight, CheckCircle2, Loader2, ChevronDown, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -152,23 +153,17 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       const signedTransaction = await signTransaction(transaction);
 
       setTxStatus("confirming");
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: "confirmed",
-      });
-
-      const confirmation = await connection.confirmTransaction(
-        {
-          signature,
-          blockhash: data.blockhash,
-          lastValidBlockHeight: data.lastValidBlockHeight,
-        },
-        "confirmed"
+      const result = await sendTransactionWithRetry(
+        connection,
+        signedTransaction,
+        data.lastValidBlockHeight
       );
 
-      if (confirmation.value.err) {
-        throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+      if (!result.success) {
+        throw new Error(`Transaction failed: error code ${result.errorCode}`);
       }
+
+      const signature = result.signature;
 
       // Confirm creator in DB (fire-and-forget, don't block success)
       fetch("/api/confirmDealCreated", {

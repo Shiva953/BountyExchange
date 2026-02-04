@@ -1,4 +1,4 @@
-import { Connection, VersionedTransaction } from "@solana/web3.js";
+import { Connection, Transaction, VersionedTransaction } from "@solana/web3.js";
 import { sleep } from "./sleep";
 
 interface CustomInstructionError {
@@ -15,7 +15,7 @@ interface CustomInstructionError {
  */
 export async function sendTransactionWithRetry(
   connection: Connection,
-  signedTransaction: VersionedTransaction,
+  signedTransaction: Transaction | VersionedTransaction,
   lastValidBlockHeight: number
 ): Promise<{
   signature: string;

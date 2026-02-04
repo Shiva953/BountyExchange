@@ -377,18 +377,6 @@ async function handleStatus(telegramUserId: string) {
     message += dealLines.join("\n\n");
   }
 
-  if (expiredPending.length > 0) {
-    message += `\n\n<b>⏳ Awaiting Finalization (${expiredPending.length})</b>\n\n`;
-    const lines = expiredPending.map((deal, i) => {
-      return (
-        `🟠 <b>${i + 1}.</b> ${formatTokenDisplay(deal)}\n` +
-        `   💰 $${deal.rewardAmount.toLocaleString()} reward\n` +
-        `   <i>Expired — awaiting crank finalization</i>`
-      );
-    });
-    message += lines.join("\n\n");
-  }
-
   if (finalizedDeals.length > 0) {
     message += `\n\n<b>🏁 Recent Results</b>\n\n`;
     const lines = finalizedDeals.map((deal) => {

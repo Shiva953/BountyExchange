@@ -4,9 +4,8 @@ import {
   PublicKey,
   Transaction,
   Keypair,
-  sendAndConfirmTransaction,
-  TransactionExpiredBlockheightExceededError,
 } from "@solana/web3.js";
+import { sendTransactionWithRetry as sendTxWithRetry } from "@/utils/sendTransactionWithRetry";
 import { BN } from "@coral-xyz/anchor";
 import { getProgram } from "@/program/instructions/createDeal";
 import { buildFinalizeDealInstruction } from "@/program/instructions/finalizeDeal";
@@ -42,10 +41,20 @@ function getCrankKeypair(): Keypair | null {
   }
 }
 
+// Program error code mappings from IDL
+const PROGRAM_ERROR_MAP: Record<number, string> = {
+  6003: "Deal is not active - may already be finalized",
+  6006: "Deal has not been accepted",
+  6009: "Deal has expired - cannot finalize",
+  6010: "Volume requirement not met",
+};
+
 /**
  * Sends a transaction with retry logic for handling blockhash expiration.
+ * Uses the shared sendTransactionWithRetry utility for send+confirm,
+ * with an outer retry loop for blockhash expiration.
  */
-async function sendTransactionWithRetry(
+async function sendFinalizeTxWithRetry(
   connection: Connection,
   transaction: Transaction,
   signers: Keypair[],
@@ -64,63 +73,50 @@ async function sendTransactionWithRetry(
       // Sign with all signers
       transaction.sign(...signers);
 
-      const signature = await sendAndConfirmTransaction(
+      const result = await sendTxWithRetry(
         connection,
         transaction,
-        signers,
-        {
-          commitment: "confirmed",
-          maxRetries: 3,
-        }
+        lastValidBlockHeight
       );
 
-      return { signature, success: true };
+      if (result.success) {
+        return { signature: result.signature, success: true };
+      }
+
+      // Check for specific program errors via error code
+      const programError = result.errorCode
+        ? PROGRAM_ERROR_MAP[result.errorCode]
+        : undefined;
+
+      if (programError) {
+        return {
+          signature: result.signature,
+          success: false,
+          error: programError,
+        };
+      }
+
+      return {
+        signature: result.signature,
+        success: false,
+        error: `Transaction failed with error code: ${result.errorCode}`,
+      };
     } catch (error) {
       lastError = error as Error;
 
+      // "Transaction did not land" means block height exceeded
       const isBlockhashExpired =
-        error instanceof TransactionExpiredBlockheightExceededError ||
+        (error as Error).message?.includes("Transaction did not land") ||
         (error as Error).message?.includes("block height exceeded") ||
         (error as Error).message?.includes("Blockhash not found");
 
       if (isBlockhashExpired && attempt < maxRetries) {
         const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
         console.log(
-          `[FINALIZE] Blockhash expired on attempt ${attempt}/${maxRetries}, retrying in ${delay}ms...`
+          `[FINALIZE] Transaction didn't land on attempt ${attempt}/${maxRetries}, retrying in ${delay}ms...`
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
-      }
-
-      // Check for specific program errors
-      const errorMsg = (error as Error).message || "";
-      if (errorMsg.includes("DealExpired")) {
-        return {
-          signature: "",
-          success: false,
-          error: "Deal has expired - cannot finalize",
-        };
-      }
-      if (errorMsg.includes("VolumeRequirementNotMet")) {
-        return {
-          signature: "",
-          success: false,
-          error: "Volume requirement not met",
-        };
-      }
-      if (errorMsg.includes("DealNotActive")) {
-        return {
-          signature: "",
-          success: false,
-          error: "Deal is not active - may already be finalized",
-        };
-      }
-      if (errorMsg.includes("DealNotAccepted")) {
-        return {
-          signature: "",
-          success: false,
-          error: "Deal has not been accepted",
-        };
       }
 
       console.error(
@@ -299,7 +295,7 @@ export async function POST(request: NextRequest) {
     const transaction = new Transaction().add(instruction);
 
     console.log("[FINALIZE] Sending transaction...");
-    const result = await sendTransactionWithRetry(connection, transaction, [
+    const result = await sendFinalizeTxWithRetry(connection, transaction, [
       crankKeypair,
     ]);
 
