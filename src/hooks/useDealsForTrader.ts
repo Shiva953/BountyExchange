@@ -43,28 +43,44 @@ export function useDealsForTrader() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previousWalletRef = useRef<string | null>(null);
+  const connectionRef = useRef(connection);
+  const isFetchingRef = useRef(false);
 
-  // Clear deals immediately when wallet changes
+  // Keep connection ref updated without causing re-renders
+  useEffect(() => {
+    connectionRef.current = connection;
+  }, [connection]);
+
+  // Clear deals only when switching to a DIFFERENT wallet (not when wallet temporarily becomes undefined)
   useEffect(() => {
     const currentWallet = publicKey?.toBase58() ?? null;
-    if (previousWalletRef.current !== currentWallet) {
+    // Only clear if switching to a different wallet, not if wallet becomes temporarily undefined
+    if (currentWallet && previousWalletRef.current && previousWalletRef.current !== currentWallet) {
       setDeals([]);
       setError(null);
+    }
+    if (currentWallet) {
       previousWalletRef.current = currentWallet;
     }
   }, [publicKey]);
 
   const fetchDeals = useCallback(async () => {
     if (!publicKey) {
-      setDeals([]);
+      // Don't clear deals when wallet is temporarily undefined - preserve existing data
       return;
     }
+
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) {
+      return;
+    }
+    isFetchingRef.current = true;
 
     setLoading(true);
     setError(null);
 
     try {
-      const program = getProgram(connection);
+      const program = getProgram(connectionRef.current);
 
       const allDeals = await program.account.deal.all([
         {
@@ -114,10 +130,12 @@ export function useDealsForTrader() {
       setDeals(dealsWithMetadata);
     } catch {
       setError("Failed to fetch deals");
+      // Don't clear deals on error - preserve existing data
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
-  }, [connection, publicKey]);
+  }, [publicKey]); // Removed connection dependency - use ref instead
 
   useEffect(() => {
     fetchDeals();

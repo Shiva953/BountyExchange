@@ -7,6 +7,7 @@ import {
   CreateDealArgs,
   USDC_MINT,
 } from "@/program/instructions/createDeal";
+import { createApiError, withRetry } from "@/lib/errors";
 
 function generateDealId(): BN {
   const timestamp = Date.now();
@@ -102,17 +103,18 @@ export async function POST(request: NextRequest) {
 
     const connection = new Connection(process.env.HELIUS_RPC_URL!, "confirmed");
 
-    const { instruction, dealPDA, escrowVault } = await buildCreateDealInstruction(
-      connection,
-      payerPubkey,
-      args,
-      USDC_MINT
+    // Retry RPC calls with exponential backoff
+    const { instruction, dealPDA, escrowVault } = await withRetry(
+      () => buildCreateDealInstruction(connection, payerPubkey, args, USDC_MINT),
+      { maxRetries: 3, initialDelay: 500 }
     );
 
     logDealDetails(payerPubkey, args, dealPDA, escrowVault);
 
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash("confirmed");
+    const { blockhash, lastValidBlockHeight } = await withRetry(
+      () => connection.getLatestBlockhash("confirmed"),
+      { maxRetries: 3, initialDelay: 500 }
+    );
 
     const transaction = new Transaction();
     transaction.add(instruction);
@@ -139,10 +141,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error creating deal:", error);
+    const apiError = createApiError(error);
     return NextResponse.json(
       {
-        error: "Failed to build transaction",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: apiError.message,
+        code: apiError.code,
+        retryable: apiError.retryable,
+        retryAfter: apiError.retryAfter,
       },
       { status: 500 }
     );

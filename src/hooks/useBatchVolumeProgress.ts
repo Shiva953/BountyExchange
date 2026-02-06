@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { toast } from "sonner";
+import { extractApiError } from "./useApiError";
 
 interface VolumeData {
   volumeUSD: number;
@@ -38,6 +40,7 @@ const POLL_INTERVAL = 5000; // Poll every 5 seconds
 // cached values would override fresh data. The hook now only preserves data
 // within the same session (no page refresh persistence).
 // Stale-while-revalidate now only applies to refetch() calls within same session.
+// time complexity of the entire logic
 
 export function useBatchVolumeProgress(
   requests: VolumeRequest[],
@@ -76,7 +79,8 @@ export function useBatchVolumeProgress(
       return;
     }
 
-    // Seed initial values from DB (fast) before running slow Helius calculation
+    // Fetch from DB first (fast) - this is the primary data source
+    // DB is updated by cron, so we trust it and skip Helius for items in DB
     const dbSeededKeys = new Set<string>();
     if (!forceRevalidate) {
       try {
@@ -92,7 +96,8 @@ export function useBatchVolumeProgress(
             setVolumes((prev) => {
               const newMap = new Map(prev);
               for (const item of dbData.volumes) {
-                if (item.volumeCompleted > 0 && !newMap.has(item.publicKey)) {
+                // Seed from DB for any item that exists (even if volumeCompleted is 0)
+                if (!newMap.has(item.publicKey)) {
                   const targetVolume = targetVolumeMap.current.get(item.publicKey) || 0;
                   const progress = targetVolume > 0 ? (item.volumeCompleted / targetVolume) * 100 : 0;
                   newMap.set(item.publicKey, {
@@ -102,18 +107,31 @@ export function useBatchVolumeProgress(
                     tokenPrice: null,
                     progress,
                     lastUpdated: Date.now(),
-                    isStale: true,
+                    isStale: false,
                   });
                   dbSeededKeys.add(item.publicKey);
+                  fetchedKeysRef.current.add(item.publicKey); // Mark as done
                 }
               }
               return newMap;
             });
           }
         }
-      } catch {
-        // DB seed failed, continue with Helius batch
+      } catch (err) {
+        // DB fetch failed - log but continue to Helius fallback
+        console.warn("[useBatchVolumeProgress] DB fetch failed, falling back to Helius:", err);
       }
+    }
+
+    // Filter out DB-seeded keys - no need to hit slow Helius API for these
+    const remainingRequests = pendingRequests.filter((req) => !dbSeededKeys.has(req.key));
+
+    // If all items were fetched from DB, we're done
+    if (remainingRequests.length === 0) {
+      setLoading(false);
+      setLoadingKeys(new Set());
+      setIsRevalidating(false);
+      return;
     }
 
     // Cancel any ongoing requests
@@ -122,26 +140,14 @@ export function useBatchVolumeProgress(
     }
     abortControllerRef.current = new AbortController();
 
-    // If we have cached data (from DB seed or previous fetch), this is a revalidation
-    const hasCachedData = dbSeededKeys.size > 0 || pendingRequests.some((req) => volumes.has(req.key));
-    if (hasCachedData || forceRevalidate) {
-      setIsRevalidating(true);
-    } else {
-      setLoading(true);
-    }
 
-    // Only show loading indicators for keys without cached data (including DB seed)
-    const keysWithoutCache = pendingRequests
-      .filter((req) => !volumes.has(req.key) && !dbSeededKeys.has(req.key))
-      .map((r) => r.key);
-    if (keysWithoutCache.length > 0) {
-      setLoadingKeys(new Set(keysWithoutCache));
-    }
+    setLoading(true);
+    setLoadingKeys(new Set(remainingRequests.map((r) => r.key)));
 
-    // Split into batches for the batch API
+
     const batches: VolumeRequest[][] = [];
-    for (let i = 0; i < pendingRequests.length; i += BATCH_SIZE) {
-      batches.push(pendingRequests.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < remainingRequests.length; i += BATCH_SIZE) {
+      batches.push(remainingRequests.slice(i, i + BATCH_SIZE));
     }
 
     for (const batch of batches) {
@@ -169,13 +175,21 @@ export function useBatchVolumeProgress(
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP error: ${response.status}`);
+          const apiError = await extractApiError(response);
+          if (apiError.retryable) {
+            toast.error(apiError.message, { description: "Will retry automatically..." });
+          }
+          throw new Error(apiError.message);
         }
 
         const result = await response.json();
 
         if (!result.success) {
-          throw new Error(result.error || "Batch request failed");
+          const errorMsg = result.error || "Batch request failed";
+          if (result.retryable) {
+            toast.error(errorMsg, { description: "Will retry automatically..." });
+          }
+          throw new Error(errorMsg);
         }
 
         // Process results
@@ -197,9 +211,11 @@ export function useBatchVolumeProgress(
               return newMap;
             });
           } else {
+            // Use structured error message from API if available
+            const errorMsg = item.error || "Unknown error";
             setErrors((prev) => {
               const newMap = new Map(prev);
-              newMap.set(item.key, item.error || "Unknown error");
+              newMap.set(item.key, errorMsg);
               return newMap;
             });
           }
@@ -217,14 +233,26 @@ export function useBatchVolumeProgress(
 
         console.error("[useBatchVolumeProgress] Batch request failed:", err);
 
+        // Determine user-friendly error message
+        let errorMsg = "Failed to load volume data";
+        if (err instanceof Error) {
+          const msg = err.message.toLowerCase();
+          if (msg.includes("connection") || msg.includes("network") || msg.includes("fetch")) {
+            errorMsg = "Connection issue - please check your network";
+          } else if (msg.includes("403") || msg.includes("forbidden")) {
+            errorMsg = "Service temporarily unavailable";
+          } else if (msg.includes("429") || msg.includes("rate")) {
+            errorMsg = "Too many requests - please wait";
+          } else {
+            errorMsg = err.message;
+          }
+        }
+
         // Mark all items in this batch as errored
         for (const req of batch) {
           setErrors((prev) => {
             const newMap = new Map(prev);
-            newMap.set(
-              req.key,
-              err instanceof Error ? err.message : "Unknown error"
-            );
+            newMap.set(req.key, errorMsg);
             return newMap;
           });
 

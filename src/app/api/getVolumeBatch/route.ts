@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calculateTokenVolumeCached } from "@/utils/calculateTokenVolume";
+import { createApiError, isRPCError, withRetry } from "@/lib/errors";
 
 interface VolumeRequest {
   wallet: string;
@@ -23,6 +24,8 @@ interface VolumeResult {
     tokenPrice: number | null;
   };
   error?: string;
+  code?: string;
+  retryable?: boolean;
 }
 
 // Increased from 3 to 10 for better throughput
@@ -68,16 +71,34 @@ export async function POST(request: NextRequest) {
           const filterEndTime = req.endTime ? Number(req.endTime) : undefined;
           const minBuyVolumeUSD = req.minBuyVolume ? Number(req.minBuyVolume) : undefined;
 
-          const result = await calculateTokenVolumeCached(
-            req.wallet,
-            req.token,
-            filterStartTime,
-            filterEndTime,
-            minBuyVolumeUSD
+          // Retry RPC errors with exponential backoff
+          const result = await withRetry(
+            async () => {
+              const res = await calculateTokenVolumeCached(
+                req.wallet,
+                req.token,
+                filterStartTime,
+                filterEndTime,
+                minBuyVolumeUSD
+              );
+              // Throw on RPC errors to trigger retry
+              if (!res.success && res.error && isRPCError(new Error(res.error))) {
+                throw new Error(res.error);
+              }
+              return res;
+            },
+            { maxRetries: 2, initialDelay: 500 }
           );
 
           if (!result.success) {
-            return { key: req.key, success: false, error: result.error };
+            const apiError = createApiError(new Error(result.error || "Unknown error"));
+            return {
+              key: req.key,
+              success: false,
+              error: apiError.message,
+              code: apiError.code,
+              retryable: apiError.retryable,
+            } as VolumeResult;
           }
 
           return {
@@ -94,11 +115,14 @@ export async function POST(request: NextRequest) {
             },
           };
         } catch (err) {
+          const apiError = createApiError(err);
           return {
             key: req.key,
             success: false,
-            error: err instanceof Error ? err.message : "Unknown error",
-          };
+            error: apiError.message,
+            code: apiError.code,
+            retryable: apiError.retryable,
+          } as VolumeResult;
         }
       });
 
@@ -124,10 +148,14 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error in getVolumeBatch:", error);
+    const apiError = createApiError(error);
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error occurred",
+        error: apiError.message,
+        code: apiError.code,
+        retryable: apiError.retryable,
+        retryAfter: apiError.retryAfter,
       },
       { status: 500 }
     );

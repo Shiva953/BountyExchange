@@ -5,6 +5,7 @@ import {
   buildAcceptDealInstruction,
   logAcceptDealDetails,
 } from "@/program/instructions/acceptDeal";
+import { createApiError, withRetry } from "@/lib/errors";
 
 interface AcceptDealRequestBody {
   trader: string;
@@ -37,7 +38,12 @@ export async function POST(request: NextRequest) {
 
     const connection = new Connection(process.env.HELIUS_RPC_URL!, "confirmed");
     const program = getProgram(connection);
-    const dealAccount = await program.account.deal.fetch(dealPubkey);
+
+    // Retry RPC calls with exponential backoff
+    const dealAccount = await withRetry(
+      () => program.account.deal.fetch(dealPubkey),
+      { maxRetries: 3, initialDelay: 500 }
+    );
 
     if (!dealAccount.isActive) {
       return NextResponse.json(
@@ -60,16 +66,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { instruction } = await buildAcceptDealInstruction(
-      connection,
-      traderPubkey,
-      dealPubkey
+    const { instruction } = await withRetry(
+      () => buildAcceptDealInstruction(connection, traderPubkey, dealPubkey),
+      { maxRetries: 3, initialDelay: 500 }
     );
 
     logAcceptDealDetails(traderPubkey, dealPubkey);
 
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash("confirmed");
+    const { blockhash, lastValidBlockHeight } = await withRetry(
+      () => connection.getLatestBlockhash("confirmed"),
+      { maxRetries: 3, initialDelay: 500 }
+    );
 
     const transaction = new Transaction();
     transaction.add(instruction);
@@ -94,10 +101,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error accepting deal:", error);
+    const apiError = createApiError(error);
     return NextResponse.json(
       {
-        error: "Failed to build transaction",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: apiError.message,
+        code: apiError.code,
+        retryable: apiError.retryable,
+        retryAfter: apiError.retryAfter,
       },
       { status: 500 }
     );

@@ -4,7 +4,8 @@ import { useState, useCallback, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Transaction } from "@solana/web3.js";
 import { sendTransactionWithRetry } from "@/utils/sendTransactionWithRetry";
-import { ArrowLeft, ArrowUpRight, CheckCircle2, Loader2, ChevronDown, Users } from "lucide-react";
+import { extractApiError, type ApiError } from "@/hooks/useApiError";
+import { ArrowLeft, ArrowUpRight, CheckCircle2, Loader2, ChevronDown, Users, RefreshCw, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,23 +67,62 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
   });
   const [traders, setTraders] = useState<Trader[]>([]);
   const [tradersLoading, setTradersLoading] = useState(false);
+  const [tradersError, setTradersError] = useState<ApiError | null>(null);
   const [showTraderDropdown, setShowTraderDropdown] = useState(false);
+
+  // Fetch traders with retry logic
+  const fetchTraders = useCallback(async () => {
+    setTradersLoading(true);
+    setTradersError(null);
+
+    try {
+      const res = await fetch("/api/getTraders");
+
+      if (!res.ok) {
+        const apiError = await extractApiError(res);
+        setTradersError(apiError);
+        if (apiError.retryable) {
+          toast.error(apiError.message, { description: "Retrying..." });
+          // Auto-retry after delay
+          setTimeout(() => fetchTraders(), apiError.retryAfter || 2000);
+        } else {
+          toast.error(apiError.message);
+        }
+        return;
+      }
+
+      const data = await res.json();
+      if (data.success) {
+        setTraders(data.traders);
+      } else if (data.retryable) {
+        setTradersError({
+          message: data.error || "Failed to load traders",
+          code: data.code || "UNKNOWN",
+          retryable: true,
+          retryAfter: data.retryAfter,
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching traders:", err);
+      const isNetwork = err instanceof Error &&
+        (err.message.includes("fetch") || err.message.includes("network"));
+      setTradersError({
+        message: isNetwork ? "Connection failed" : "Failed to load traders",
+        code: isNetwork ? "CONNECTION_ERROR" : "UNKNOWN",
+        retryable: isNetwork,
+        retryAfter: 2000,
+      });
+    } finally {
+      setTradersLoading(false);
+    }
+  }, []);
 
   // Fetch traders when modal opens
   useEffect(() => {
     if (isOpen) {
-      setTradersLoading(true);
-      fetch("/api/getTraders")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success) {
-            setTraders(data.traders);
-          }
-        })
-        .catch((err) => console.error("Error fetching traders:", err))
-        .finally(() => setTradersLoading(false));
+      fetchTraders();
     }
-  }, [isOpen]);
+  }, [isOpen, fetchTraders]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) onClose();
@@ -143,6 +183,12 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       const data = await response.json();
 
       if (!response.ok) {
+        // Handle connection/RPC errors with better messages
+        if (data.code === "CONNECTION_ERROR") {
+          throw new Error("Connection failed. Please check your network and try again.");
+        } else if (data.code === "RPC_FORBIDDEN" || data.code === "RPC_ERROR") {
+          throw new Error("Service temporarily unavailable. Please try again.");
+        }
         throw new Error(data.error || "Failed to build transaction");
       }
 
@@ -206,9 +252,13 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
     } catch (error) {
       setTxStatus("error");
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      const lowerMessage = errorMessage.toLowerCase();
 
+      // Check for connection/network errors
+      if (lowerMessage.includes("connection") || lowerMessage.includes("network") || lowerMessage.includes("fetch failed")) {
+        toast.error("Connection failed", { description: "Please check your network and try again." });
       // Check for RewardBelowMinimum error (code 6001)
-      if (errorMessage.includes("6001") || errorMessage.includes("RewardBelowMinimum") || errorMessage.includes("Minimum reward amount")) {
+      } else if (errorMessage.includes("6001") || errorMessage.includes("RewardBelowMinimum") || errorMessage.includes("Minimum reward amount")) {
         toast.error("Minimum reward amount is 200 USDC");
       // Check for SelfTargetedDeal error (code 6005)
       } else if (errorMessage.includes("6005") || errorMessage.includes("SelfTargetedDeal") || errorMessage.includes("targeting yourself")) {
@@ -216,6 +266,9 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       // Check for MinBuyVolumeExceedsTarget error (code 6012)
       } else if (errorMessage.includes("6012") || errorMessage.includes("MinBuyVolumeExceedsTarget") || errorMessage.includes("Minimum buy volume must be less than")) {
         toast.error("Min buy size must be less than target volume");
+      // Check for RPC service errors
+      } else if (lowerMessage.includes("service") || lowerMessage.includes("unavailable") || lowerMessage.includes("rpc")) {
+        toast.error("Service temporarily unavailable", { description: "Please try again in a moment." });
       } else {
         toast.error(errorMessage);
       }
@@ -321,6 +374,25 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                               </div>
                             ))}
                           </>
+                        ) : tradersError ? (
+                          <div className="px-3 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2 text-sm text-destructive mb-2">
+                              <AlertCircle className="w-4 h-4" />
+                              {tradersError.message}
+                            </div>
+                            {tradersError.retryable && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => fetchTraders()}
+                                className="gap-2"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                Retry
+                              </Button>
+                            )}
+                          </div>
                         ) : traders.length === 0 ? (
                           <div className="px-3 py-4 text-center text-sm text-muted-foreground">
                             No traders found

@@ -15,8 +15,8 @@ import {
 } from "./notifications";
 
 const FINALIZE_CHECK_INTERVAL = "* * * * *";
-const TRADER_STATS_INTERVAL = "*/2 * * * *";
-const RECONCILE_INTERVAL = "*/2 * * * *";
+const TRADER_STATS_INTERVAL = "*/3 * * * *"; // Every 3 min (reduced from 2 to lower Helius load)
+const RECONCILE_INTERVAL = "1-59/3 * * * *"; // Every 3 min, offset by 1 min to not overlap with stats sync
 const CLEANUP_INTERVAL = "0 * * * *";
 
 const MAX_RETRIES = 3;
@@ -246,7 +246,8 @@ export async function syncDealVolumes() {
         }
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // 500ms between Helius calls to stay under rate limits
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     console.log("[CRON] Deal volume sync complete");
@@ -331,19 +332,35 @@ export async function checkAndFinalizeDeals() {
         ? Number(account.minBuyVolume) / 10 ** 9
         : undefined;
 
-      try {
-        const volumeResult = await calculateTokenVolumeFast(
-          traderAddress,
-          account.token.toBase58(),
-          createdAtSec,
-          isExpired ? expiresAtSec : undefined,
-          minBuyVolumeUSD
-        );
-        if (volumeResult.success) {
-          volumeCompleted = volumeResult.volumeUSD;
+      // First check DB for cached volume (updated by syncTraderStats every 3 min)
+      const dbDealForVolume = await prisma.deal.findUnique({ where: { publicKey: pubkey } });
+      const dbVolume = dbDealForVolume ? Number(dbDealForVolume.volumeCompleted || 0) : 0;
+
+      // Only call Helius if:
+      // 1. Deal is expired (need exact final volume), OR
+      // 2. DB volume is within 10% of target (need fresh data to confirm pass/fail)
+      const needsFreshVolume = isExpired || (dbVolume >= targetVolumeUSD * 0.9);
+
+      if (needsFreshVolume) {
+        try {
+          const volumeResult = await calculateTokenVolumeFast(
+            traderAddress,
+            account.token.toBase58(),
+            createdAtSec,
+            isExpired ? expiresAtSec : undefined,
+            minBuyVolumeUSD
+          );
+          if (volumeResult.success) {
+            volumeCompleted = volumeResult.volumeUSD;
+          }
+        } catch (error) {
+          console.error(`[CRON] Volume calc failed for ${pubkey.slice(0, 8)}...:`, error);
+          // Fall back to DB volume if Helius fails
+          volumeCompleted = dbVolume;
         }
-      } catch (error) {
-        console.error(`[CRON] Volume calc failed for ${pubkey.slice(0, 8)}...:`, error);
+      } else {
+        // Use cached DB volume - not close to target, no need for fresh data
+        volumeCompleted = dbVolume;
       }
 
       const hasMetVolume = volumeCompleted >= targetVolumeUSD;
@@ -600,7 +617,8 @@ export async function syncTraderStats() {
             await checkAndSendExpiryWarnings(dealInfo);
           }
 
-          await new Promise((resolve) => setTimeout(resolve, 200));
+          // 500ms between Helius calls to stay under rate limits
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
         const volumeFromCompleted = completedDeals.reduce((sum, deal) => {
@@ -771,33 +789,8 @@ export async function reconcileOnChainState() {
               `[CRON] Reconcile: Synced finalized deal ${pubkey.slice(0, 8)}... → ${outcome} (volume: ${volumeCompleted.toFixed(2)})`
             );
           } else if (dbDeal.isActive && account.isActive) {
-            const startTime = dbDeal.acceptedAt
-              ? Math.floor(dbDeal.acceptedAt.getTime() / 1000)
-              : Math.floor(dbDeal.createdAt.getTime() / 1000);
-            const minBuyVolumeUSD = dbDeal.minBuyVolume
-              ? Number(dbDeal.minBuyVolume) / 10 ** 9
-              : undefined;
-
-            try {
-              const volumeResult = await calculateTokenVolumeFast(
-                cleanAddress,
-                dbDeal.token,
-                startTime,
-                undefined,
-                minBuyVolumeUSD
-              );
-              if (volumeResult.success) {
-                await prisma.deal.update({
-                  where: { id: dbDeal.id },
-                  data: { volumeCompleted: volumeResult.volumeUSD },
-                });
-              }
-            } catch (error) {
-              console.error(
-                `[CRON] Reconcile: Volume update failed for active deal ${pubkey.slice(0, 8)}...:`,
-                error
-              );
-            }
+            // Active deals: syncTraderStats already updates volumeCompleted every 2 min
+            // No need to recalculate here - just skip to avoid redundant Helius calls
           } else if (!dbDeal.isActive && !account.isActive) {
             let onChainOutcome: string | null = null;
             let onChainVolume = 0;
