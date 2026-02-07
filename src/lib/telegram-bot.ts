@@ -9,7 +9,7 @@ import { fetchTokenMetadata } from "@/utils/tokenMetadata";
 import { calculateTokenVolumeFast } from "@/utils/calculateTokenVolume";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
-const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://devnet.helius-rpc.com/?api-key=e8dd8baa-d6a6-4cae-a097-3cd6cdcef462";
+const RPC_URL = process.env.HELIUS_DEVNET_URL!;
 const BOT_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 interface TelegramUpdate {

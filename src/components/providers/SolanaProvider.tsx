@@ -18,7 +18,7 @@ interface SolanaProviderProps {
 }
 
 export const SolanaProvider: FC<SolanaProviderProps> = ({ children }) => {
-  const endpoint = useMemo(() => process.env.NEXT_PUBLIC_HELIUS_RPC_URL!, []);
+  const endpoint = useMemo(() => process.env.NEXT_PUBLIC_HELIUS_DEVNET_URL!, []);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

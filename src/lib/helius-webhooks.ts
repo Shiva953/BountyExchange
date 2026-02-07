@@ -228,7 +228,7 @@ export async function getOrCreateSwapWebhook(): Promise<HeliusWebhook> {
     );
   }
 
-  const rpcUrl = process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "";
+  const rpcUrl = process.env.HELIUS_DEVNET_URL || "";
   const isDevnet = rpcUrl.toLowerCase().includes("devnet");
   const webhookType: WebhookType = isDevnet ? "enhancedDevnet" : "enhanced";
 

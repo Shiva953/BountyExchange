@@ -4,8 +4,7 @@ export interface TokenMetadata {
   image: string;
 }
 
-const HELIUS_MAINNET_RPC =
-  "https://mainnet.helius-rpc.com/?api-key=e8dd8baa-d6a6-4cae-a097-3cd6cdcef462";
+const HELIUS_MAINNET_RPC = process.env.HELIUS_MAINNET_URL!;
 const JUPITER_TOKEN_API = "https://lite-api.jup.ag/tokens/v1/token";
 
 async function fetchTokenMetadataFromJupiter(

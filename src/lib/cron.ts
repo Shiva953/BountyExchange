@@ -246,8 +246,8 @@ export async function syncDealVolumes() {
         }
       }
 
-      // 500ms between Helius calls to stay under rate limits
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Helius Dev plan: 50 req/s - reduced delay
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
     console.log("[CRON] Deal volume sync complete");
@@ -281,7 +281,7 @@ export async function checkAndFinalizeDeals() {
     const nowSec = Math.floor(now.getTime() / 1000);
 
     const connection = new Connection(
-      process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL!,
+      process.env.HELIUS_DEVNET_URL!,
       "confirmed"
     );
     const program = getProgram(connection);
@@ -498,7 +498,8 @@ export async function checkAndFinalizeDeals() {
         pendingFinalizations.delete(pubkey);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Helius Dev plan: 50 req/s - reduced delay
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
     console.log("[CRON] Deal finalization check complete");
@@ -617,8 +618,8 @@ export async function syncTraderStats() {
             await checkAndSendExpiryWarnings(dealInfo);
           }
 
-          // 500ms between Helius calls to stay under rate limits
-          await new Promise((resolve) => setTimeout(resolve, 500));
+          // Helius Dev plan: 50 req/s - reduced delay
+          await new Promise((resolve) => setTimeout(resolve, 50));
         }
 
         const volumeFromCompleted = completedDeals.reduce((sum, deal) => {
@@ -679,7 +680,7 @@ export async function reconcileOnChainState() {
 
   try {
     const connection = new Connection(
-      process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL!,
+      process.env.HELIUS_DEVNET_URL!,
       "confirmed"
     );
     const program = getProgram(connection);

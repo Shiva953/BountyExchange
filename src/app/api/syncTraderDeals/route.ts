@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     console.log(`[SYNC] Starting sync for trader: ${traderAddress}`);
 
     const connection = new Connection(
-      process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL!
+      process.env.HELIUS_DEVNET_URL!
     );
     const program = getProgram(connection);
 
@@ -189,8 +189,8 @@ export async function POST(request: NextRequest) {
         syncedCount++;
         console.log(`[SYNC] Synced deal ${dealPubkey.slice(0, 8)}... volume: $${volumeCompleted.toFixed(2)}`);
 
-        // Small delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        // Helius Dev plan: 50 req/s - reduced delay
+        await new Promise((resolve) => setTimeout(resolve, 50));
       } catch (error) {
         console.error(`[SYNC] Error syncing deal ${dealPubkey}:`, error);
       }

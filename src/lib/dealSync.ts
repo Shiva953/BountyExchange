@@ -20,7 +20,7 @@ export async function syncDealAccepted(dealPubkey: string) {
 
   try {
     const connection = new Connection(
-      process.env.HELIUS_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL!
+      process.env.HELIUS_DEVNET_URL!
     );
     const program = getProgram(connection);
 

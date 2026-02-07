@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const connection = new Connection(process.env.HELIUS_RPC_URL!, "confirmed");
+    const connection = new Connection(process.env.HELIUS_DEVNET_URL!, "confirmed");
     const program = getProgram(connection);
 
     // Trader field offset in Deal account

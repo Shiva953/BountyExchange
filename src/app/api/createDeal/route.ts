@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       holdDurationInHours,
     };
 
-    const connection = new Connection(process.env.HELIUS_RPC_URL!, "confirmed");
+    const connection = new Connection(process.env.HELIUS_DEVNET_URL!, "confirmed");
 
     // Retry RPC calls with exponential backoff
     const { instruction, dealPDA, escrowVault } = await withRetry(

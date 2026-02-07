@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const connection = new Connection(process.env.HELIUS_RPC_URL!, "confirmed");
+    const connection = new Connection(process.env.HELIUS_DEVNET_URL!, "confirmed");
     const program = getProgram(connection);
 
     // Retry RPC calls with exponential backoff

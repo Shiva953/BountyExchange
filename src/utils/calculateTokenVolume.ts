@@ -81,12 +81,10 @@ export interface VolumeResult {
   error?: string;
 }
 
-const HELIUS_API_BASE = "https://api-mainnet.helius-rpc.com/v0";
+const HELIUS_API_BASE = process.env.HELIUS_MAINNET_API_BASE || "https://api-mainnet.helius-rpc.com/v0";
 const DEBUG = true;
 
-// Concurrency limiter for parallel API requests
-// Prevents overwhelming Helius API while maximizing throughput
-const HELIUS_CONCURRENCY_LIMIT = 5;
+const HELIUS_CONCURRENCY_LIMIT = 15;
 
 async function parallelWithLimit<T, R>(
   items: T[],
@@ -180,7 +178,7 @@ export async function getAllTransactionsForAddress(
     throw new Error("HELIUS_API_KEY environment variable is not set");
   }
 
-  const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${apiKey}`;
+  const rpcUrl = process.env.HELIUS_MAINNET_URL!;
 
   try {
     while (true) {
@@ -266,8 +264,8 @@ export async function getAllTransactionsForAddress(
         break;
       }
 
-      // Reduced from 50ms - Helius rate limits are generous (100+ req/s)
-      await new Promise(resolve => setTimeout(resolve, 15));
+      // Helius Dev plan: 50 req/s - minimal delay needed
+      await new Promise(resolve => setTimeout(resolve, 5));
     }
 
     debug("getAllTransactions", `Total signatures fetched: ${allSignatures.length}`);
@@ -795,8 +793,8 @@ export async function getSwapTransactionsForAddress(
         break;
       }
 
-      // Reduced from 100ms - Helius rate limits are generous (100+ req/s)
-      await new Promise(resolve => setTimeout(resolve, 25));
+      // Helius Dev plan: 50 req/s - minimal delay needed
+      await new Promise(resolve => setTimeout(resolve, 5));
     }
 
     debug("getSwapTransactionsForAddress", `Total swap transactions: ${allSwaps.length}`);
