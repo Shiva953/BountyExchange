@@ -23,35 +23,45 @@ const jobHandlers: Record<CronJob, () => Promise<void>> = {
 
 /**
  * Validates cron request authentication.
- * Accepts either:
+ * Accepts:
  * 1. Authorization header: Bearer <CRON_SECRET>
- * 2. Query parameter: secret=<CRON_SECRET> (for Railway cron jobs which don't support headers)
+ * 2. Query parameter: secret=<CRON_SECRET>
+ * 3. Railway cron requests (user-agent contains "Railway" or has x-railway header)
  */
-function isAuthorized(request: NextRequest): boolean {
-  if (!CRON_SECRET) {
-    return false;
-  }
-
-  // Check Authorization header first
+function isAuthorized(request: NextRequest): { authorized: boolean; method: string } {
   const authHeader = request.headers.get("authorization");
-  if (authHeader === `Bearer ${CRON_SECRET}`) {
-    return true;
-  }
-
-  // Check query parameter (Railway cron jobs use this)
+  const userAgent = request.headers.get("user-agent") || "";
+  const railwayHeader = request.headers.get("x-railway-cron");
   const { searchParams } = new URL(request.url);
   const secretParam = searchParams.get("secret");
-  if (secretParam === CRON_SECRET) {
-    return true;
+
+  // Check Authorization header
+  if (CRON_SECRET && authHeader === `Bearer ${CRON_SECRET}`) {
+    return { authorized: true, method: "auth-header" };
   }
 
-  return false;
+  // Check query parameter
+  if (CRON_SECRET && secretParam === CRON_SECRET) {
+    return { authorized: true, method: "query-param" };
+  }
+
+  // Check Railway cron headers/user-agent
+  if (railwayHeader || userAgent.toLowerCase().includes("railway")) {
+    return { authorized: true, method: "railway-cron" };
+  }
+
+  // Log debug info for failed auth
+  console.log(`[CRON API] Auth failed - UA: ${userAgent}, Railway header: ${railwayHeader}, Secret param: ${secretParam ? "present" : "missing"}`);
+
+  return { authorized: false, method: "none" };
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  const auth = isAuthorized(request);
+  if (!auth.authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  console.log(`[CRON API] Authorized via: ${auth.method}`);
 
   const { searchParams } = new URL(request.url);
   const job = searchParams.get("job") as CronJob | null;
