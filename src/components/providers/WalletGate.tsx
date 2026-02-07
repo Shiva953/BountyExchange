@@ -1,15 +1,21 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { FC, ReactNode, useState, useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+
+// Dynamic import to avoid SSR issues with wallet button
+const WalletMultiButton = dynamic(
+  () => import("@solana/wallet-adapter-react-ui").then((mod) => mod.WalletMultiButton),
+  { ssr: false, loading: () => <div className="h-10 w-32 bg-white/10 rounded-lg animate-pulse" /> }
+);
 
 interface WalletGateProps {
   children: ReactNode;
 }
 
 export const WalletGate: FC<WalletGateProps> = ({ children }) => {
-  const { connected, connecting } = useWallet();
+  const { connected, connecting, wallet } = useWallet();
   const [mounted, setMounted] = useState(false);
 
   // Prevent hydration mismatch
@@ -17,7 +23,7 @@ export const WalletGate: FC<WalletGateProps> = ({ children }) => {
     setMounted(true);
   }, []);
 
-  // Show nothing until mounted (prevents hydration issues)
+  // Show loading until mounted (prevents hydration issues)
   if (!mounted) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
