@@ -12,22 +12,32 @@
   "crons": [
     {
       "schedule": "*/2 * * * *",
-      "endpoint": "/api/cron?job=sync-volumes",
+      "endpoint": "/api/cron?job=sync-volumes&secret=${{CRON_SECRET}}",
       "timeoutSeconds": 120
     },
     {
       "schedule": "* * * * *",
-      "endpoint": "/api/cron?job=check-expired",
+      "endpoint": "/api/cron?job=check-expired&secret=${{CRON_SECRET}}",
       "timeoutSeconds": 60
     },
     {
       "schedule": "*/5 * * * *",
-      "endpoint": "/api/cron?job=sync-traders",
+      "endpoint": "/api/cron?job=sync-traders&secret=${{CRON_SECRET}}",
       "timeoutSeconds": 120
     },
     {
       "schedule": "0 * * * *",
-      "endpoint": "/api/cron?job=cleanup",
+      "endpoint": "/api/cron?job=cleanup&secret=${{CRON_SECRET}}",
+      "timeoutSeconds": 60
+    },
+    {
+      "schedule": "1-59/3 * * * *",
+      "endpoint": "/api/cron?job=reconcile&secret=${{CRON_SECRET}}",
+      "timeoutSeconds": 120
+    },
+    {
+      "schedule": "0 * * * *",
+      "endpoint": "/api/cron?job=mark-orphaned&secret=${{CRON_SECRET}}",
       "timeoutSeconds": 60
     }
   ]

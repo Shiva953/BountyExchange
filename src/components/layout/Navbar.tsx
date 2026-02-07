@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Grid3x3, ShoppingBag, Zap, Briefcase } from "lucide-react";
-import {} from "react-icons/fa"
+import { useState, useEffect } from "react";
 
 const WalletMultiButton = dynamic(
   () =>
@@ -18,9 +18,18 @@ const WalletMultiButton = dynamic(
 export const Navbar = () => {
   const pathname = usePathname();
   const { publicKey } = useWallet();
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch - wallet state differs between server and client
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Use null for publicKey during SSR to prevent hydration mismatch
+  const safePublicKey = mounted ? publicKey : null;
 
   // Check if current path matches trader route pattern
-  const isTraderPage = publicKey && pathname?.startsWith(`/${publicKey.toBase58()}/deals`);
+  const isTraderPage = safePublicKey && pathname?.startsWith(`/${safePublicKey.toBase58()}/deals`);
 
   return (
     <>
@@ -47,10 +56,10 @@ export const Navbar = () => {
             <Grid3x3 className="w-5 h-5" />
             <span className="text-[10px] mt-1 font-medium">Market</span>
           </Link>
-          
-          {publicKey && (
+
+          {safePublicKey && (
             <Link
-              href={`/${publicKey.toBase58()}/deals`}
+              href={`/${safePublicKey.toBase58()}/deals`}
               className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${
                 isTraderPage
                   ? "bg-white/10 text-[#ff6b8a]"
@@ -63,7 +72,7 @@ export const Navbar = () => {
             </Link>
           )}
 
-          {publicKey && (
+          {safePublicKey && (
             <Link
               href="/sponsor"
               className={`flex flex-col items-center justify-center w-14 h-14 rounded-xl transition-all duration-200 ${

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { FC, ReactNode, useState, useEffect } from "react";
+import { FC, ReactNode, useState, useEffect, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 
 // Dynamic import to avoid SSR issues with wallet button
@@ -14,14 +14,52 @@ interface WalletGateProps {
   children: ReactNode;
 }
 
-export const WalletGate: FC<WalletGateProps> = ({ children }) => {
-  const { connected, connecting, wallet } = useWallet();
-  const [mounted, setMounted] = useState(false);
+// Check if there's a previously connected wallet in localStorage
+const getStoredWalletName = (): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem("walletName");
+  } catch {
+    return null;
+  }
+};
 
-  // Prevent hydration mismatch
+export const WalletGate: FC<WalletGateProps> = ({ children }) => {
+  const { connected, connecting } = useWallet();
+  const [mounted, setMounted] = useState(false);
+  const [isAutoConnecting, setIsAutoConnecting] = useState(false);
+  const autoConnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Prevent hydration mismatch and handle autoConnect timing
   useEffect(() => {
     setMounted(true);
+
+    // Check if we have a stored wallet - if so, we're likely autoConnecting
+    const storedWallet = getStoredWalletName();
+    if (storedWallet) {
+      setIsAutoConnecting(true);
+      // Give autoConnect time to complete (handles slow extension injection in Brave)
+      autoConnectTimeoutRef.current = setTimeout(() => {
+        setIsAutoConnecting(false);
+      }, 2000); // 2 second grace period for wallet extension to load
+    }
+
+    return () => {
+      if (autoConnectTimeoutRef.current) {
+        clearTimeout(autoConnectTimeoutRef.current);
+      }
+    };
   }, []);
+
+  // Clear autoConnecting state when connection succeeds or fails definitively
+  useEffect(() => {
+    if (connected || connecting) {
+      setIsAutoConnecting(false);
+      if (autoConnectTimeoutRef.current) {
+        clearTimeout(autoConnectTimeoutRef.current);
+      }
+    }
+  }, [connected, connecting]);
 
   // Show loading until mounted (prevents hydration issues)
   if (!mounted) {
@@ -32,8 +70,8 @@ export const WalletGate: FC<WalletGateProps> = ({ children }) => {
     );
   }
 
-  // Connecting - show loading
-  if (connecting) {
+  // Connecting or autoConnecting - show loading
+  if (connecting || isAutoConnecting) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
         <div className="text-center max-w-md">

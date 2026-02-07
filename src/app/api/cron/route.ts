@@ -21,9 +21,35 @@ const jobHandlers: Record<CronJob, () => Promise<void>> = {
   reconcile: reconcileOnChainState,
 };
 
-export async function POST(request: NextRequest) {
+/**
+ * Validates cron request authentication.
+ * Accepts either:
+ * 1. Authorization header: Bearer <CRON_SECRET>
+ * 2. Query parameter: secret=<CRON_SECRET> (for Railway cron jobs which don't support headers)
+ */
+function isAuthorized(request: NextRequest): boolean {
+  if (!CRON_SECRET) {
+    return false;
+  }
+
+  // Check Authorization header first
   const authHeader = request.headers.get("authorization");
-  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (authHeader === `Bearer ${CRON_SECRET}`) {
+    return true;
+  }
+
+  // Check query parameter (Railway cron jobs use this)
+  const { searchParams } = new URL(request.url);
+  const secretParam = searchParams.get("secret");
+  if (secretParam === CRON_SECRET) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function POST(request: NextRequest) {
+  if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

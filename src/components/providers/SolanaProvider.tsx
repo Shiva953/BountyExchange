@@ -1,6 +1,6 @@
 "use client";
 
-import { FC, ReactNode, useMemo, useCallback } from "react";
+import { FC, ReactNode, useMemo, useCallback, useState, useEffect } from "react";
 import {
   ConnectionProvider,
   WalletProvider,
@@ -24,14 +24,19 @@ interface SolanaProviderProps {
 }
 
 export const SolanaProvider: FC<SolanaProviderProps> = ({ children }) => {
+  const [mounted, setMounted] = useState(false);
+
   const endpoint = useMemo(() => process.env.NEXT_PUBLIC_HELIUS_DEVNET_URL!, []);
 
-  // Initialize wallet adapters - these handle SSR gracefully
+  // Initialize wallet adapters - empty array during SSR to prevent hydration issues
   const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-    ],
+    () => {
+      if (typeof window === "undefined") return [];
+      return [
+        new PhantomWalletAdapter(),
+        new SolflareWalletAdapter(),
+      ];
+    },
     []
   );
 
@@ -63,9 +68,19 @@ export const SolanaProvider: FC<SolanaProviderProps> = ({ children }) => {
     console.error("Wallet error:", error.message, error);
   }, []);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Always render providers to ensure useWallet() hooks work
+  // But only enable autoConnect after mounting to prevent hydration issues
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect onError={onError}>
+      <WalletProvider
+        wallets={wallets}
+        autoConnect={mounted}
+        onError={onError}
+      >
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
