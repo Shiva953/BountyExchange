@@ -294,16 +294,47 @@ export async function checkAndFinalizeDeals() {
       (d) => d.account.isActive && d.account.isAccepted
     );
 
-    const dealsToCheck = activeAcceptedDeals.filter((d) => {
-      const createdAt = d.account.createdAt.toNumber();
-      const expirationHours = d.account.expirationWindowInHours.toNumber();
+    // First, get all deals that need finalization checking:
+    // 1. Deals within 15 min of expiry (buffer window)
+    // 2. Deals that have met volume target (for early finalization)
+    // 3. Expired deals (up to 1 hour past expiry - beyond that, markOrphanedDeals handles them)
+    const dealsToCheck: typeof activeAcceptedDeals = [];
+
+    // Get DB deals for volume checking (to detect early finalization candidates)
+    const dbDealsForVolume = await prisma.deal.findMany({
+      where: {
+        publicKey: { in: activeAcceptedDeals.map(deal => deal.publicKey.toBase58()) },
+      },
+      select: { publicKey: true, volumeCompleted: true, targetVolume: true },
+    });
+    const dbDealVolumeMap = new Map(
+      dbDealsForVolume.map(deal => [deal.publicKey, { volumeCompleted: Number(deal.volumeCompleted || 0) }])
+    );
+
+    for (const onChainDealCandidate of activeAcceptedDeals) {
+      const createdAt = onChainDealCandidate.account.createdAt.toNumber();
+      const expirationHours = onChainDealCandidate.account.expirationWindowInHours.toNumber();
       const expiresAtSec = createdAt + expirationHours * 3600;
       const bufferSec = FINALIZATION_BUFFER_MS / 1000;
-      return nowSec >= expiresAtSec - bufferSec && nowSec <= expiresAtSec + bufferSec;
-    });
+      const oneHourSec = 60 * 60;
+
+      // Check if deal is in the expiry buffer window (15 min before to 1 hour after)
+      const isNearExpiry = nowSec >= expiresAtSec - bufferSec && nowSec <= expiresAtSec + oneHourSec;
+
+      // Check if deal has met volume target (early finalization candidate)
+      const pubkey = onChainDealCandidate.publicKey.toBase58();
+      const dbDealVolume = dbDealVolumeMap.get(pubkey);
+      const targetVolumeUSD = Number(onChainDealCandidate.account.targetVolume) / 10 ** 9;
+      const volumeCompleted = dbDealVolume ? dbDealVolume.volumeCompleted : 0;
+      const hasMetVolume = volumeCompleted >= targetVolumeUSD;
+
+      if (isNearExpiry || hasMetVolume) {
+        dealsToCheck.push(onChainDealCandidate);
+      }
+    }
 
     console.log(
-      `[CRON] Found ${dealsToCheck.length} on-chain deals near/past expiry (from ${activeAcceptedDeals.length} total active)`
+      `[CRON] Found ${dealsToCheck.length} deals to check for finalization (${activeAcceptedDeals.length} total active) — includes volume-met early finalization candidates`
     );
 
     for (const onChainDeal of dealsToCheck) {
