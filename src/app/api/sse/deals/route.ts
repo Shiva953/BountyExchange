@@ -17,8 +17,9 @@ import {
   type SSEEvent,
 } from "@/lib/sse-broadcaster";
 
-// Use edge runtime for better connection handling
-export const runtime = "edge";
+// Use nodejs runtime for Railway (edge has issues with long-lived connections)
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Polling interval for pending events (ms)
 const POLL_INTERVAL = 2000;

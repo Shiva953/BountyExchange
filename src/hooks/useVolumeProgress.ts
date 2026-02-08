@@ -81,6 +81,13 @@ export function useVolumeProgress({
 
   useEffect(() => {
     fetchVolume();
+
+    // Poll every 30 seconds as fallback for SSE
+    const interval = setInterval(() => {
+      fetchVolume();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, [fetchVolume]);
 
   return {

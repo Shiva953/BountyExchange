@@ -1,13 +1,14 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction } from "@solana/web3.js";
 import { sendTransactionWithRetry } from "@/utils/sendTransactionWithRetry";
 import { getProgram } from "@/program/instructions/createDeal";
 import { ArrowLeft, Clock, Target, Calendar, Check, Loader2, ArrowUpRight, RefreshCw } from "lucide-react";
 import { useVolumeProgress } from "@/hooks/useVolumeProgress";
+import { useDealSSE } from "@/hooks/useDealSSE";
 import Link from "next/link";
 import { toast } from "sonner";
 import { fetchTokenMetadata, TokenMetadata } from "@/utils/tokenMetadata";
@@ -135,6 +136,9 @@ export default function DealPage() {
 
   const dealPubkey = params.dealPubkey as string;
 
+  // Real-time volume from SSE
+  const [realtimeVolume, setRealtimeVolume] = useState<number | null>(null);
+
   useEffect(() => {
     async function fetchDeal() {
       if (!dealPubkey) return;
@@ -182,14 +186,32 @@ export default function DealPage() {
 
   // Fetch real volume progress when deal is accepted
   // Must be called unconditionally (before any early returns) to follow Rules of Hooks
-  // Convert minBuyVolume from USDC decimals to USD for the volume calculation filter
-  const minBuyVolumeUSD = deal?.minBuyVolume ? deal.minBuyVolume / 10 ** USDC_DECIMALS : undefined;
-  const { volumeUSD, loading: volumeLoading, refetch: refetchVolume } = useVolumeProgress({
+  // Memoize params to prevent unnecessary refetches
+  const volumeParams = useMemo(() => ({
     walletAddress: deal?.trader.toBase58() ?? "",
     tokenMint: deal?.token.toBase58() ?? "",
     startTime: deal?.createdAt,
-    minBuyVolume: minBuyVolumeUSD,
+    minBuyVolume: deal?.minBuyVolume ? deal.minBuyVolume / 10 ** USDC_DECIMALS : undefined,
     enabled: Boolean(deal?.isAccepted),
+  }), [deal?.trader, deal?.token, deal?.createdAt, deal?.minBuyVolume, deal?.isAccepted]);
+
+  const { volumeUSD, loading: volumeLoading, refetch: refetchVolume } = useVolumeProgress(volumeParams);
+
+  // SSE for real-time updates - memoize to prevent reconnection loops
+  const dealPublicKeys = useMemo(() => dealPubkey ? [dealPubkey] : [], [dealPubkey]);
+  const handleSSEVolumeUpdate = useCallback((dealKey: string, newVolumeUSD: number, progress: number) => {
+    console.log(`[SSE] Volume update: ${dealKey.slice(0, 8)}... → $${newVolumeUSD.toFixed(2)} (${progress.toFixed(1)}%)`);
+    setRealtimeVolume(newVolumeUSD);
+  }, []);
+  const handleSSEMilestone = useCallback((dealKey: string, milestone: 25 | 50 | 75 | 90) => {
+    console.log(`[SSE] Milestone reached: ${dealKey.slice(0, 8)}... → ${milestone}%`);
+  }, []);
+
+  useDealSSE({
+    dealPublicKeys,
+    enabled: Boolean(deal?.isAccepted),
+    onVolumeUpdate: handleSSEVolumeUpdate,
+    onMilestone: handleSSEMilestone,
   });
 
   const handleAcceptBounty = async () => {
@@ -293,10 +315,10 @@ export default function DealPage() {
   const holdDuration = deal.holdDurationInHours;
   const holdText = `${holdDuration} hour${holdDuration !== 1 ? "s" : ""}`;
 
-  // Calculate volume progress
+  // Calculate volume progress - use realtime if available, otherwise fall back to API fetch
   const targetVolumeUSD = deal.targetVolume / 10 ** USDC_DECIMALS;
-  const progressPercentage = Math.min(100, Math.round((volumeUSD / targetVolumeUSD) * 100));
-  const currentVolume = volumeUSD;
+  const currentVolume = realtimeVolume !== null ? realtimeVolume : volumeUSD;
+  const progressPercentage = Math.min(100, Math.round((currentVolume / targetVolumeUSD) * 100));
 
   // TODO: Implement hold duration tracking
   const holdProgressPercentage = 0;

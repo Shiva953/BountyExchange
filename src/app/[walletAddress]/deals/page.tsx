@@ -88,6 +88,15 @@ function ProfileCard({ walletAddress, traderName, traderImageUrl, activeBounties
     }
 
     checkTelegramStatus();
+
+    // Re-check when user returns to the tab (e.g., after unlinking in Telegram)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkTelegramStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [walletAddress, isOwnProfile]);
 
   const handleSyncTelegram = () => {

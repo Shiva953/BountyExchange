@@ -1,0 +1,38 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "prisma migrate deploy && npm run start"
+healthcheckPath = "/api/health"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[[crons]]
+schedule = "*/2 * * * *"
+endpoint = "/api/cron?job=sync-volumes"
+timeoutSeconds = 120
+
+[[crons]]
+schedule = "* * * * *"
+endpoint = "/api/cron?job=check-expired"
+timeoutSeconds = 60
+
+[[crons]]
+schedule = "*/5 * * * *"
+endpoint = "/api/cron?job=sync-traders"
+timeoutSeconds = 120
+
+[[crons]]
+schedule = "0 * * * *"
+endpoint = "/api/cron?job=cleanup"
+timeoutSeconds = 60
+
+[[crons]]
+schedule = "1-59/3 * * * *"
+endpoint = "/api/cron?job=reconcile"
+timeoutSeconds = 120
+
+[[crons]]
+schedule = "0 * * * *"
+endpoint = "/api/cron?job=mark-orphaned"
+timeoutSeconds = 60
