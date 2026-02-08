@@ -1,6 +1,12 @@
 [build]
 builder = "NIXPACKS"
 
+[build.nixpacksPlan.phases.setup]
+nixPkgs = ["...", "bun"]
+
+[build.nixpacksPlan.phases.install]
+cmds = ["bun install --frozen-lockfile"]
+
 [deploy]
 startCommand = "prisma migrate deploy && npm run start"
 healthcheckPath = "/api/health"
