@@ -369,8 +369,8 @@ async function handleStatus(telegramUserId: string) {
       return (
         `<b>${i + 1}.</b> ${formatTokenDisplay(deal)}\n` +
         `   ${progressBar} ${vol.percent.toFixed(1)}%\n` +
-        `   $${vol.volumeUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })} / $${deal.targetVolume.toLocaleString()}\n` +
-        `   💰 Reward: <b>$${deal.rewardAmount.toLocaleString()}</b>\n` +
+        `   $${vol.volumeUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / $${deal.targetVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
+        `   💰 Reward: <b>$${deal.rewardAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>\n` +
         `   ${timeBar} Expires: <i>${timeLeft}</i>`
       );
     });
@@ -383,8 +383,8 @@ async function handleStatus(telegramUserId: string) {
       const won = deal.outcome === true;
       const icon = won ? "🟢" : "🔴";
       const label = won ? "✅ PASSED" : "❌ FAILED";
-      const volStr = deal.volumeCompletedUsd !== null ? `$${deal.volumeCompletedUsd.toLocaleString()}` : "N/A";
-      return `${icon} ${formatTokenDisplay(deal)} — <b>${label}</b>\n   Vol: ${volStr} / $${deal.targetVolume.toLocaleString()} | 💰 $${deal.rewardAmount.toLocaleString()}`;
+      const volStr = deal.volumeCompletedUsd !== null ? `$${deal.volumeCompletedUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A";
+      return `${icon} ${formatTokenDisplay(deal)} — <b>${label}</b>\n   Vol: ${volStr} / $${deal.targetVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | 💰 $${deal.rewardAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     });
     message += lines.join("\n");
   }
@@ -417,6 +417,12 @@ async function handleSettings(telegramUserId: string, messageId?: number, chatId
 
   const keyboard = {
     inline_keyboard: [
+      [
+        {
+          text: `${settings.newBountyAvailable ? on : off} New Bounty Alerts`,
+          callback_data: "toggle_newBountyAvailable",
+        },
+      ],
       [
         {
           text: `${settings.progressMilestones ? on : off} Progress (25/50/75/90%)`,
@@ -481,6 +487,7 @@ async function handleUnlink(telegramUserId: string) {
 }
 
 const settingNames: Record<string, string> = {
+  newBountyAvailable: "New Bounty Alerts",
   dealAccepted: "Deal Accepted",
   progressMilestones: "Progress Updates",
   dailySummary: "Daily Summary",
@@ -502,6 +509,7 @@ async function handleCallbackQuery(query: {
   }
 
   const field = query.data.replace("toggle_", "") as
+    | "newBountyAvailable"
     | "dealAccepted"
     | "progressMilestones"
     | "dailySummary"
@@ -802,6 +810,7 @@ async function handleHelp(telegramUserId: string) {
       `/unlink — Disconnect your wallet\n` +
       `/help — Show this message\n\n` +
       `<b>Notifications you'll receive:</b>\n` +
+      `🆕 New bounty alerts <i>(when someone offers you a bounty)</i>\n` +
       `🟢 Progress milestones <i>(25%, 50%, 75%, 90%)</i>\n` +
       `🟠 Expiry warnings <i>(24h, 6h, 1h before)</i>\n` +
       `📊 Daily summary of active deals\n` +

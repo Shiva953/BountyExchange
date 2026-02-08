@@ -12,11 +12,13 @@ import {
   checkAndSendExpiryWarnings,
   sendFinalizationNotification,
   sendDailySummaries,
+  sendNewBountyNotification,
 } from "./notifications";
 
 const FINALIZE_CHECK_INTERVAL = "* * * * *";
 const TRADER_STATS_INTERVAL = "*/3 * * * *"; // Every 3 min (reduced from 2 to lower Helius load)
 const RECONCILE_INTERVAL = "1-59/3 * * * *"; // Every 3 min, offset by 1 min to not overlap with stats sync
+const NEW_BOUNTY_CHECK_INTERVAL = "2-59/3 * * * *"; // Every 3 min, offset by 2 min
 const CLEANUP_INTERVAL = "0 * * * *";
 
 const MAX_RETRIES = 3;
@@ -29,6 +31,7 @@ let isInitialized = false;
 let isTraderStatsSyncRunning = false;
 let isFinalizationRunning = false;
 let isReconciliationRunning = false;
+let isNewBountyCheckRunning = false;
 
 const pendingFinalizations = new Set<string>();
 
@@ -932,6 +935,79 @@ export async function runCleanup() {
 }
 
 /**
+ * Checks for new unaccepted bounties on-chain and notifies targeted traders.
+ * Only notifies traders who have Telegram linked and newBountyAvailable enabled.
+ */
+export async function checkAndNotifyNewBounties() {
+  if (isNewBountyCheckRunning) {
+    console.log("[CRON] New bounty check already running, skipping...");
+    return;
+  }
+
+  isNewBountyCheckRunning = true;
+  console.log("[CRON] Checking for new bounties to notify...");
+
+  try {
+    const connection = new Connection(
+      process.env.HELIUS_DEVNET_URL!,
+      "confirmed"
+    );
+    const program = getProgram(connection);
+
+    // Fetch all on-chain deals
+    const allOnChainDeals = await fetchAllDealsOnChain(program, connection);
+
+    // Filter to unaccepted, active deals that haven't expired
+    const now = Date.now();
+    const availableBounties = allOnChainDeals.filter((d) => {
+      if (!d.account.isActive || d.account.isAccepted) return false;
+      const createdAt = d.account.createdAt.toNumber() * 1000;
+      const expirationMs = d.account.expirationWindowInHours.toNumber() * 60 * 60 * 1000;
+      const expiresAt = createdAt + expirationMs;
+      return expiresAt > now;
+    });
+
+    console.log(`[CRON] Found ${availableBounties.length} available bounties on-chain`);
+
+    let notified = 0;
+    let skipped = 0;
+
+    for (const bounty of availableBounties) {
+      const traderAddress = bounty.account.trader.toBase58();
+      const dealPubkey = bounty.publicKey.toBase58();
+
+      const createdAt = bounty.account.createdAt.toNumber() * 1000;
+      const expirationMs = bounty.account.expirationWindowInHours.toNumber() * 60 * 60 * 1000;
+      const expiresAt = new Date(createdAt + expirationMs);
+
+      const result = await sendNewBountyNotification(traderAddress, {
+        dealPubkey,
+        token: bounty.account.token.toBase58(),
+        targetVolume: Number(bounty.account.targetVolume) / 10 ** 9,
+        rewardAmount: Number(bounty.account.rewardAmount) / 10 ** 9,
+        expiresAt,
+        creatorAddress: bounty.account.creator.toBase58(),
+      });
+
+      if (result.sent) {
+        notified++;
+      } else {
+        skipped++;
+      }
+
+      // Rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    console.log(`[CRON] New bounty check complete: ${notified} notified, ${skipped} skipped`);
+  } catch (error) {
+    console.error("[CRON] Error in checkAndNotifyNewBounties:", error);
+  } finally {
+    isNewBountyCheckRunning = false;
+  }
+}
+
+/**
  * Initialize all cron jobs
  */
 export function initCronJobs() {
@@ -952,6 +1028,10 @@ export function initCronJobs() {
 
   cron.schedule(RECONCILE_INTERVAL, () => {
     reconcileOnChainState().catch(console.error);
+  });
+
+  cron.schedule(NEW_BOUNTY_CHECK_INTERVAL, () => {
+    checkAndNotifyNewBounties().catch(console.error);
   });
 
   cron.schedule(CLEANUP_INTERVAL, () => {

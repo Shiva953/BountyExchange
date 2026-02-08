@@ -11,6 +11,34 @@ import { toast } from "sonner";
 import { useBatchVolumeProgress } from "@/hooks/useBatchVolumeProgress";
 import { getMarketCap, formatMarketCap } from "@/utils/getMarketCap";
 
+// Detect wallet switches to prevent render errors during transition
+function useWalletTransition() {
+  const { publicKey, connected } = useWallet();
+  const prevWalletRef = useRef<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  useEffect(() => {
+    const currentWallet = publicKey?.toBase58() ?? null;
+    const prevWallet = prevWalletRef.current;
+
+    // Detect wallet switch: connected with different wallet than before
+    if (prevWallet && currentWallet && prevWallet !== currentWallet) {
+      setIsTransitioning(true);
+      // Clear after a tick to allow redirect to happen cleanly
+      const timer = setTimeout(() => setIsTransitioning(false), 50);
+      return () => clearTimeout(timer);
+    }
+
+    if (currentWallet) {
+      prevWalletRef.current = currentWallet;
+    } else if (!connected) {
+      prevWalletRef.current = null;
+    }
+  }, [publicKey, connected]);
+
+  return isTransitioning;
+}
+
 const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
 
 interface MyDealsPageProps {
@@ -694,15 +722,22 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
   const { walletAddress } = use(params);
   const router = useRouter();
   const { publicKey, connected } = useWallet();
-  const { deals, traderData, loading, error } = useTraderDeals(walletAddress);
+  const isWalletTransitioning = useWalletTransition();
+
+  // Check wallet match BEFORE calling other hooks to prevent errors during wallet switch
+  const currentWalletAddress = publicKey?.toBase58();
+  const isOwnProfile = currentWalletAddress === walletAddress;
+
+  // During wallet transition or when viewing another wallet's page, skip data fetching
+  const shouldFetchData = !isWalletTransitioning && (isOwnProfile || !connected);
+
+  const { deals, traderData, loading, error } = useTraderDeals(shouldFetchData ? walletAddress : null);
   const { deals: availableDeals, loading: availableLoading } = useDealsForTrader();
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
   const [completedSubTab, setCompletedSubTab] = useState<"all" | "pass" | "fail">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [rewardFilter, setRewardFilter] = useState<RewardFilter>("all");
   const [sortBy, setSortBy] = useState<SortOption>("reward_desc");
-
-  const isOwnProfile = publicKey?.toBase58() === walletAddress;
 
   // Track if user was on their own profile (to handle redirect on disconnect)
   const wasOwnProfileRef = useRef(false);
@@ -725,6 +760,19 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
       router.push("/");
     }
   }, [connected, publicKey, isOwnProfile, router]);
+
+  // Don't render during wallet transition to prevent errors
+  if (isWalletTransitioning) {
+    return (
+      <main className="min-h-screen pt-24 px-6 bg-black pl-28">
+        <div className="max-w-6xl mt-6 mx-auto">
+          <div className="flex items-center justify-center min-h-[50vh]">
+            <Loader2 className="w-8 h-8 animate-spin text-zinc-500" />
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   // Don't render content if viewing another wallet's deals page (redirect in progress)
   if (connected && publicKey && !isOwnProfile) {

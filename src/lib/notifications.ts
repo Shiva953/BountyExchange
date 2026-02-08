@@ -8,6 +8,7 @@ import { fetchTokenMetadata } from "@/utils/tokenMetadata";
 
 // Types of notifications
 type NotificationType =
+  | "new_bounty"
   | "deal_accepted"
   | "milestone_25"
   | "milestone_50"
@@ -101,8 +102,8 @@ function formatTimeRemaining(expiresAt: Date): string {
 // Helper: format USD amount
 function formatUSD(amount: number): string {
   return amount.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
@@ -451,4 +452,88 @@ export async function checkAndSendExpiryWarnings(deal: DealInfo) {
   } else if (hoursUntilExpiry <= 1 && hoursUntilExpiry > 0) {
     await sendExpiryWarning({ ...deal, expiresAt: deal.expiresAt }, 1);
   }
+}
+
+interface NewBountyInfo {
+  dealPubkey: string;
+  token: string;
+  targetVolume: number;
+  rewardAmount: number;
+  expiresAt: Date;
+  creatorAddress: string;
+}
+
+/**
+ * Send notification when a new bounty is available for a trader
+ */
+export async function sendNewBountyNotification(
+  traderAddress: string,
+  bounty: NewBountyInfo
+) {
+  const trader = await prisma.trader.findUnique({
+    where: { address: traderAddress },
+    include: { notificationSettings: true },
+  });
+
+  if (!trader?.telegramUserId) {
+    return { sent: false, reason: "no_telegram" };
+  }
+
+  if (!trader.notificationSettings?.newBountyAvailable) {
+    return { sent: false, reason: "disabled" };
+  }
+
+  // Use dealPubkey as a unique identifier for the notification
+  // We store null for dealId since the deal isn't in our DB yet
+  const existingLog = await prisma.notification_log.findFirst({
+    where: {
+      traderId: trader.id,
+      type: "new_bounty",
+      messageId: bounty.dealPubkey, // Using messageId field to store dealPubkey for uniqueness
+    },
+  });
+
+  if (existingLog) {
+    return { sent: false, reason: "already_sent" };
+  }
+
+  const timeLeft = formatTimeRemaining(bounty.expiresAt);
+  const tokenDisplay = await formatToken(bounty.token);
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+  const dealUrl = `${baseUrl}/deal/${bounty.dealPubkey}`;
+
+  const message =
+    `🆕 <b>New Bounty Available!</b>\n\n` +
+    `Someone just created a bounty for you!\n\n` +
+    `<b>Token:</b> ${tokenDisplay}\n` +
+    `<b>Target Volume:</b> $${formatUSD(bounty.targetVolume)}\n` +
+    `<b>Reward:</b> 💰 <b>$${formatUSD(bounty.rewardAmount)}</b>\n` +
+    `<b>Time to Complete:</b> ${timeLeft}\n\n` +
+    `<a href="${dealUrl}">View & Accept Bounty →</a>`;
+
+  const result = await sendToUser(trader.telegramUserId, message, {
+    replyMarkup: {
+      inline_keyboard: [[{ text: "🎯 View Bounty", url: dealUrl }]],
+    },
+  });
+
+  if (result.success) {
+    try {
+      await prisma.notification_log.create({
+        data: {
+          traderId: trader.id,
+          dealId: null,
+          type: "new_bounty",
+          messageId: bounty.dealPubkey, // Store dealPubkey for dedup
+        },
+      });
+    } catch {
+      // Ignore duplicate errors
+    }
+    console.log(
+      `[NOTIFICATIONS] Sent new_bounty to trader ${trader.address.slice(0, 8)}... for deal ${bounty.dealPubkey.slice(0, 8)}...`
+    );
+  }
+
+  return { sent: result.success };
 }

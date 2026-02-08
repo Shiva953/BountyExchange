@@ -63,6 +63,7 @@ model notification_settings {
   trader             trader   @relation(fields: [traderId], references: [id])
 
   // What to notify
+  newBountyAvailable Boolean  @default(true)
   dealAccepted       Boolean  @default(true)
   progressMilestones Boolean  @default(true)
   dailySummary       Boolean  @default(true)
