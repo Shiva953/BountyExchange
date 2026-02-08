@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [build.nixpacksPlan.phases.setup]
-nixPkgs = ["...", "bun"]
+nixPkgs = ["...", "bun", "python3", "gcc", "gnumake", "libusb1", "pkg-config", "eudev"]
 
 [build.nixpacksPlan.phases.install]
 cmds = ["bun install --frozen-lockfile"]
