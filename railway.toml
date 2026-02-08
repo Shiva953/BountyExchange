@@ -1,9 +1,6 @@
 [build]
 builder = "NIXPACKS"
 
-[build.nixpacksPlan.phases.setup]
-nixPkgs = ["...", "python3", "gcc", "gnumake", "libusb1", "pkg-config", "libudev-zero"]
-
 [deploy]
 startCommand = "prisma migrate deploy && npm run start"
 healthcheckPath = "/api/health"
