@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
         expiresAt: expiresAt,
         isActive: true,
         isAccepted: true,
-        volumeCompleted: 0, // Will be updated by cron
+        volumeCompleted: 0, 
       },
       update: {
         isAccepted: true,

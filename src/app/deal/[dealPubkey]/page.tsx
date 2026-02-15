@@ -32,6 +32,8 @@ interface DealData {
   isActive: boolean;
   isAccepted: boolean;
   tokenMetadata: TokenMetadata | null;
+  outcome: boolean | null; // true = won, false = lost, null = not finalized
+  volumeCompletedUsd: number | null; // Stored volume at finalization time
 }
 
 type ButtonState = "idle" | "loading" | "success";
@@ -172,6 +174,8 @@ export default function DealPage() {
           isActive: dealAccount.isActive,
           isAccepted: dealAccount.isAccepted,
           tokenMetadata,
+          outcome: dealAccount.outcome ?? null,
+          volumeCompletedUsd: dealAccount.volumeCompletedUsd ? dealAccount.volumeCompletedUsd.toNumber() : null,
         });
       } catch (err) {
         console.error("Failed to fetch deal:", err);
@@ -184,16 +188,19 @@ export default function DealPage() {
     fetchDeal();
   }, [dealPubkey, connection]);
 
-  // Fetch real volume progress when deal is accepted
+  // Fetch real volume progress when deal is accepted but NOT finalized
+  // For finalized deals, we use the stored volumeCompletedUsd from the deal account
   // Must be called unconditionally (before any early returns) to follow Rules of Hooks
   // Memoize params to prevent unnecessary refetches
+  const isFinalized = deal?.outcome !== null && deal?.outcome !== undefined;
   const volumeParams = useMemo(() => ({
     walletAddress: deal?.trader.toBase58() ?? "",
     tokenMint: deal?.token.toBase58() ?? "",
     startTime: deal?.createdAt,
     minBuyVolume: deal?.minBuyVolume ? deal.minBuyVolume / 10 ** USDC_DECIMALS : undefined,
-    enabled: Boolean(deal?.isAccepted),
-  }), [deal?.trader, deal?.token, deal?.createdAt, deal?.minBuyVolume, deal?.isAccepted]);
+    // Only fetch live volume for accepted deals that are NOT finalized
+    enabled: Boolean(deal?.isAccepted) && !isFinalized,
+  }), [deal?.trader, deal?.token, deal?.createdAt, deal?.minBuyVolume, deal?.isAccepted, isFinalized]);
 
   const { volumeUSD, loading: volumeLoading, refetch: refetchVolume } = useVolumeProgress(volumeParams);
 
@@ -209,7 +216,8 @@ export default function DealPage() {
 
   useDealSSE({
     dealPublicKeys,
-    enabled: Boolean(deal?.isAccepted),
+    // Only enable SSE for accepted deals that are NOT finalized
+    enabled: Boolean(deal?.isAccepted) && !isFinalized,
     onVolumeUpdate: handleSSEVolumeUpdate,
     onMilestone: handleSSEMilestone,
   });
@@ -315,9 +323,14 @@ export default function DealPage() {
   const holdDuration = deal.holdDurationInHours;
   const holdText = `${holdDuration} hour${holdDuration !== 1 ? "s" : ""}`;
 
-  // Calculate volume progress - use realtime if available, otherwise fall back to API fetch
+  // Calculate volume progress
+  // For finalized deals: use the stored volumeCompletedUsd from on-chain (preserves value at finalization time)
+  // For active deals: use realtime SSE if available, otherwise fall back to API fetch
   const targetVolumeUSD = deal.targetVolume / 10 ** USDC_DECIMALS;
-  const currentVolume = realtimeVolume !== null ? realtimeVolume : volumeUSD;
+  const dealIsFinalized = deal.outcome !== null && deal.outcome !== undefined;
+  const currentVolume = dealIsFinalized && deal.volumeCompletedUsd !== null
+    ? deal.volumeCompletedUsd / 10 ** USDC_DECIMALS  // Use stored volume for finalized deals
+    : realtimeVolume !== null ? realtimeVolume : volumeUSD;  // Use live data for active deals
   const progressPercentage = Math.min(100, Math.round((currentVolume / targetVolumeUSD) * 100));
 
   // TODO: Implement hold duration tracking
@@ -481,15 +494,18 @@ export default function DealPage() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <p className="text-gray-500 text-xs tracking-tight">Bounty Goal: Volume</p>
-                  <button
-                    onClick={() => refetchVolume()}
-                    disabled={volumeLoading}
-                    className="text-gray-500 hover:text-white transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${volumeLoading ? "animate-spin" : ""}`} />
-                  </button>
+                  {/* Only show refresh button for active (non-finalized) deals */}
+                  {!dealIsFinalized && (
+                    <button
+                      onClick={() => refetchVolume()}
+                      disabled={volumeLoading}
+                      className="text-gray-500 hover:text-white transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${volumeLoading ? "animate-spin" : ""}`} />
+                    </button>
+                  )}
                 </div>
-                {volumeLoading ? (
+                {volumeLoading && !dealIsFinalized ? (
                   <div className="h-5 w-10 bg-[#2a2a2a] rounded animate-pulse" />
                 ) : (
                   <p className="text-white font-medium" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
@@ -498,7 +514,7 @@ export default function DealPage() {
                 )}
               </div>
               <div className="flex items-center gap-4">
-                {volumeLoading ? (
+                {volumeLoading && !dealIsFinalized ? (
                   <div className="h-8 w-40 bg-[#2a2a2a] rounded animate-pulse" />
                 ) : (
                   <p className="text-white text-2xl font-bold" style={{ fontFamily: MONO_FONT, letterSpacing: "-0.05em" }}>
