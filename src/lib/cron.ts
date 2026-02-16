@@ -626,6 +626,7 @@ export async function syncTraderStats() {
             const previousVolume = Number(deal.volumeCompleted || 0);
             const newVolume = volumeResult.volumeUSD;
             const targetVolume = Number(deal.targetVolume) / 10 ** 9;
+            const rewardAmount = Number(deal.rewardAmount) / 10 ** 9;
 
             await prisma.deal.update({
               where: { id: deal.id },
@@ -635,8 +636,94 @@ export async function syncTraderStats() {
             volumeFromActive += newVolume;
 
             console.log(
-              `[CRON] Deal ${deal.publicKey.slice(0, 8)}...: volume = $${newVolume.toFixed(2)}`
+              `[CRON] Deal ${deal.publicKey.slice(0, 8)}...: volume = $${newVolume.toFixed(2)} / $${targetVolume.toFixed(2)}`
             );
+
+            // ─── EARLY FINALIZATION: Trigger when volume target is met ───
+            const hasMetVolume = newVolume >= targetVolume;
+            const isNotExpired = deal.expiresAt && deal.expiresAt.getTime() > Date.now();
+            const notAlreadyProcessing = !pendingFinalizations.has(deal.publicKey);
+
+            if (hasMetVolume && isNotExpired && notAlreadyProcessing) {
+              console.log(
+                `[CRON] 🎯 Volume target met for deal ${deal.publicKey.slice(0, 8)}... ($${newVolume.toFixed(2)} >= $${targetVolume.toFixed(2)}) — triggering early finalization`
+              );
+
+              try {
+                pendingFinalizations.add(deal.publicKey);
+
+                // Hold duration: use the required value (same pattern as checkAndFinalizeDeals)
+                const holdDuration = Number(deal.holdDurationHours) || 0;
+
+                const result = await callFinalizeDealAPI(
+                  deal.publicKey,
+                  newVolume,
+                  holdDuration
+                );
+
+                if (result.success) {
+                  console.log(
+                    `[CRON] ✅ Early finalization successful for deal ${deal.publicKey.slice(0, 8)}... — signature: ${result.signature}`
+                  );
+
+                  // Update DB
+                  await prisma.deal.update({
+                    where: { id: deal.id },
+                    data: {
+                      isActive: false,
+                      finalizedAt: new Date(),
+                      outcome: "won",
+                      volumeCompleted: newVolume,
+                    },
+                  });
+
+                  await updateTraderActiveBounties(deal.traderId);
+
+                  // Send TG notification
+                  await sendFinalizationNotification(
+                    {
+                      id: deal.id,
+                      traderId: deal.traderId,
+                      token: deal.token,
+                      targetVolume,
+                      volumeCompleted: newVolume,
+                      rewardAmount,
+                      expiresAt: deal.expiresAt,
+                    },
+                    "won",
+                    result.signature
+                  );
+
+                  // Send system notification
+                  await sendDealNotification({
+                    dealPubkey: deal.publicKey,
+                    traderAddress: deal.traderAddress,
+                    traderName: null,
+                    rewardAmount,
+                    targetVolume,
+                    volumeCompleted: newVolume,
+                    outcome: "won",
+                    signature: result.signature,
+                  });
+
+                  // Skip further processing for this deal (it's finalized)
+                  continue;
+                } else {
+                  console.error(
+                    `[CRON] ❌ Early finalization failed for deal ${deal.publicKey.slice(0, 8)}...: ${result.error}`
+                  );
+                  // Don't fail the whole sync — just log and continue with notifications
+                }
+              } catch (error) {
+                console.error(
+                  `[CRON] ❌ Error during early finalization for deal ${deal.publicKey.slice(0, 8)}...:`,
+                  error
+                );
+              } finally {
+                pendingFinalizations.delete(deal.publicKey);
+              }
+            }
+            // ─── END EARLY FINALIZATION ───
 
             const dealInfo = {
               id: deal.id,
@@ -644,7 +731,7 @@ export async function syncTraderStats() {
               token: deal.token,
               targetVolume: targetVolume,
               volumeCompleted: newVolume,
-              rewardAmount: Number(deal.rewardAmount) / 10 ** 9,
+              rewardAmount,
               expiresAt: deal.expiresAt,
             };
 
