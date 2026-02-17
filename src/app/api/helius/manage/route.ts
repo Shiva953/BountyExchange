@@ -11,6 +11,7 @@ import {
   addAddressesToWebhook,
   removeAddressesFromWebhook,
   syncWebhookWithActiveTraders,
+  getActiveWebhookId,
 } from "@/lib/helius-webhooks";
 
 // Simple admin auth check
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        const webhookId = process.env.HELIUS_WEBHOOK_ID;
+        const webhookId = getActiveWebhookId();
         if (!webhookId) {
           return NextResponse.json(
             { error: "HELIUS_WEBHOOK_ID not configured" },
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        const webhookId = process.env.HELIUS_WEBHOOK_ID;
+        const webhookId = getActiveWebhookId();
         if (!webhookId) {
           return NextResponse.json(
             { error: "HELIUS_WEBHOOK_ID not configured" },

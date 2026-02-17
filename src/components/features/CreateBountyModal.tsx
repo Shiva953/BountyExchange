@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Transaction } from "@solana/web3.js";
 import { sendTransactionWithRetry } from "@/utils/sendTransactionWithRetry";
+import { signTransactionWithRetry } from "@/utils/signTransactionWithRetry";
 import { extractApiError, type ApiError } from "@/hooks/useApiError";
 import { ArrowLeft, ArrowUpRight, CheckCircle2, Loader2, ChevronDown, Users, RefreshCw, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -48,7 +49,7 @@ interface BountyFormData {
   holdDuration: string;
 }
 
-type TransactionStatus = "idle" | "building" | "signing" | "confirming" | "success" | "error";
+type TransactionStatus = "idle" | "building" | "signing" | "reconnecting" | "confirming" | "success" | "error";
 
 export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) => {
   const { publicKey, signTransaction, connected } = useWallet();
@@ -196,7 +197,22 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       const transactionBuffer = Buffer.from(data.transaction, "base64");
       const transaction = Transaction.from(transactionBuffer);
 
-      const signedTransaction = await signTransaction(transaction);
+      const signedTransaction = await signTransactionWithRetry(
+        signTransaction,
+        transaction,
+        {
+          maxAttempts: 3,
+          retryDelayMs: 1500,
+          onRetry: (attempt, maxAttempts) => {
+            setTxStatus("reconnecting");
+            toast.warning(
+              `Wallet disconnected — reconnecting (${attempt}/${maxAttempts - 1})...`,
+              { id: "wallet-reconnect", duration: Infinity }
+            );
+          },
+        }
+      );
+      toast.dismiss("wallet-reconnect");
 
       setTxStatus("confirming");
       const result = await sendTransactionWithRetry(
@@ -254,8 +270,20 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
       const lowerMessage = errorMessage.toLowerCase();
 
+      toast.dismiss("wallet-reconnect");
+
+      // Check for wallet service worker disconnection (Phantom MV3)
+      if (
+        lowerMessage.includes("disconnected port") ||
+        lowerMessage.includes("service worker") ||
+        lowerMessage.includes("could not establish connection") ||
+        lowerMessage.includes("receiving end does not exist")
+      ) {
+        toast.error("Wallet connection lost", {
+          description: "Phantom's background service couldn't reconnect. Please refresh and try again.",
+        });
       // Check for connection/network errors
-      if (lowerMessage.includes("connection") || lowerMessage.includes("network") || lowerMessage.includes("fetch failed")) {
+      } else if (lowerMessage.includes("connection") || lowerMessage.includes("network") || lowerMessage.includes("fetch failed")) {
         toast.error("Connection failed", { description: "Please check your network and try again." });
       // Check for RewardBelowMinimum error (code 6001)
       } else if (errorMessage.includes("6001") || errorMessage.includes("RewardBelowMinimum") || errorMessage.includes("Minimum reward amount")) {
@@ -282,6 +310,8 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
         return "Building transaction...";
       case "signing":
         return "Sign in wallet...";
+      case "reconnecting":
+        return "Reconnecting to wallet...";
       case "confirming":
         return "Confirming...";
       case "success":
@@ -294,7 +324,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
   };
 
   const isButtonDisabled =
-    !isFormValid || !connected || ["building", "signing", "confirming"].includes(txStatus);
+    !isFormValid || !connected || ["building", "signing", "reconnecting", "confirming"].includes(txStatus);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -553,7 +583,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                   disabled={isButtonDisabled}
                   onClick={handleCreateBounty}
                 >
-                  {["building", "signing", "confirming"].includes(txStatus) && (
+                  {["building", "signing", "reconnecting", "confirming"].includes(txStatus) && (
                     <Loader2 className="mr-2 size-4 animate-spin" />
                   )}
                   {txStatus === "success" && <CheckCircle2 className="mr-2 size-4" />}

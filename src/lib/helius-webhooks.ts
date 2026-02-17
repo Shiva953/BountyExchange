@@ -37,6 +37,12 @@ function getApiKey(): string {
   return apiKey;
 }
 
+export function getActiveWebhookId(): string | undefined {
+  return process.env.NODE_ENV === "development"
+    ? process.env.DEV_HELIUS_WEBHOOK_ID
+    : process.env.HELIUS_WEBHOOK_ID;
+}
+
 export async function createHeliusWebhook(request: CreateWebhookRequest): Promise<HeliusWebhook> {
   const apiKey = getApiKey();
 
@@ -187,7 +193,7 @@ export async function removeAddressesFromWebhook(
 }
 
 export async function getOrCreateSwapWebhook(): Promise<HeliusWebhook> {
-  const webhookId = process.env.HELIUS_WEBHOOK_ID;
+  const webhookId = getActiveWebhookId();
 
   if (webhookId) {
     try {
@@ -198,10 +204,17 @@ export async function getOrCreateSwapWebhook(): Promise<HeliusWebhook> {
   }
 
   const webhooks = await getAllHeliusWebhooks();
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL;
+  const baseUrl =
+    (process.env.NODE_ENV === "development" && process.env.DEV_WEBHOOK_URL)
+      ? process.env.DEV_WEBHOOK_URL
+      : process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL;
 
   if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_BASE_URL or VERCEL_URL must be set");
+    throw new Error(
+      process.env.NODE_ENV === "development"
+        ? "Set DEV_WEBHOOK_URL=https://<your-ngrok-url> in .env.local for local webhook testing"
+        : "NEXT_PUBLIC_BASE_URL or VERCEL_URL must be set"
+    );
   }
 
   const webhookURL = `${baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`}/api/helius/webhook`;
@@ -260,7 +273,7 @@ export async function registerTraderForWebhook(traderAddress: string): Promise<v
 
 export async function unregisterTraderFromWebhook(traderAddress: string): Promise<void> {
   try {
-    const webhookId = process.env.HELIUS_WEBHOOK_ID;
+    const webhookId = getActiveWebhookId();
     if (!webhookId) {
       console.warn("[HeliusWebhooks] No HELIUS_WEBHOOK_ID set");
       return;

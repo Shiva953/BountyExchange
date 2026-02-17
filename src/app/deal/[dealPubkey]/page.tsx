@@ -5,6 +5,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction } from "@solana/web3.js";
 import { sendTransactionWithRetry } from "@/utils/sendTransactionWithRetry";
+import { signTransactionWithRetry } from "@/utils/signTransactionWithRetry";
 import { getProgram } from "@/program/instructions/createDeal";
 import { ArrowLeft, Clock, Target, Calendar, Check, Loader2, ArrowUpRight, RefreshCw } from "lucide-react";
 import { useVolumeProgress } from "@/hooks/useVolumeProgress";
@@ -244,7 +245,21 @@ export default function DealPage() {
       }
 
       const transaction = Transaction.from(Buffer.from(data.transaction, "base64"));
-      const signedTransaction = await signTransaction(transaction);
+      const signedTransaction = await signTransactionWithRetry(
+        signTransaction,
+        transaction,
+        {
+          maxAttempts: 3,
+          retryDelayMs: 1500,
+          onRetry: (attempt, maxAttempts) => {
+            toast.warning(
+              `Wallet disconnected — reconnecting (${attempt}/${maxAttempts - 1})...`,
+              { id: "wallet-reconnect", duration: Infinity }
+            );
+          },
+        }
+      );
+      toast.dismiss("wallet-reconnect");
 
       const result = await sendTransactionWithRetry(
         connection,
@@ -296,10 +311,24 @@ export default function DealPage() {
         </div>
       );
     } catch (err) {
+      toast.dismiss("wallet-reconnect");
       console.error("Failed to accept bounty:", err);
       setButtonState("idle");
       const errorMessage = err instanceof Error ? err.message : "Failed to accept bounty";
-      toast.error(errorMessage);
+      const lowerMessage = errorMessage.toLowerCase();
+
+      if (
+        lowerMessage.includes("disconnected port") ||
+        lowerMessage.includes("service worker") ||
+        lowerMessage.includes("could not establish connection") ||
+        lowerMessage.includes("receiving end does not exist")
+      ) {
+        toast.error("Wallet connection lost", {
+          description: "Phantom's background service couldn't reconnect. Please refresh and try again.",
+        });
+      } else {
+        toast.error(errorMessage);
+      }
     }
   };
 

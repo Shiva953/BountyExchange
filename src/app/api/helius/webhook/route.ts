@@ -10,6 +10,7 @@ import {
   broadcastMilestone,
   storePendingEvent,
 } from "@/lib/sse-broadcaster";
+import { getActiveWebhookId } from "@/lib/helius-webhooks";
 import { checkAndSendMilestoneNotifications } from "@/lib/notifications";
 import { getTokenPrices } from "@/utils/getTokenPrice";
 
@@ -298,7 +299,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const webhookId = process.env.HELIUS_WEBHOOK_ID;
+  const webhookId = getActiveWebhookId();
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL;
 
   return NextResponse.json({
