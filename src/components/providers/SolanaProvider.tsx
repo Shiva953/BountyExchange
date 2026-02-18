@@ -22,48 +22,59 @@ interface SolanaProviderProps {
   children: ReactNode;
 }
 
-// Detects when autoConnect leaves the adapter in a dirty state:
-// wallet selected + not connected + not connecting.
-// This happens when the wallet extension is locked during autoConnect —
-// the "Unexpected error" is swallowed but the adapter keeps the wallet
-// "selected", so every subsequent manual connect() call also fails silently
-// (no modal shown, no feedback). Calling disconnect() resets all state
-// including localStorage so the next click opens the modal fresh.
+// Detects when the adapter is in a dirty state: wallet selected but not
+// connected and not connecting. This happens when:
+//   1. The wallet extension is locked during autoConnect (startup)
+//   2. Phantom's MV3 service worker dies mid-session
+//   3. After a wallet switch leaves the adapter stuck
+//
+// The previous approach used a one-shot didRecoverRef that was permanently
+// set to true after first recovery, which caused the "button does nothing"
+// bug: Phantom re-selects itself after disconnect(), recovery can't fire
+// again, and WalletMultiButton silently calls connect() on the dead SW.
+//
+// New approach: 2-second debounce (handles the normal ~500ms wallet switch
+// transition without false positives) + 5-second cooldown between recoveries
+// (prevents an infinite loop when Phantom aggressively re-selects itself).
 const WalletAutoConnectRecovery: FC = () => {
   const { wallet, connected, connecting, disconnect } = useWallet();
-  const [pastAutoConnectWindow, setPastAutoConnectWindow] = useState(false);
-  const didRecoverRef = useRef(false);
+  const recoveryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastRecoveryTimeRef = useRef(0);
 
   useEffect(() => {
-    // Slightly before WalletGate's 2000ms grace period so state is clean
-    // before the connect button becomes visible to the user
-    const timer = setTimeout(() => setPastAutoConnectWindow(true), 1800);
-    return () => clearTimeout(timer);
-  }, []);
+    const isDirtyState = wallet !== null && !connected && !connecting;
 
-  useEffect(() => {
-    if (connected) {
-      // Connected successfully — no recovery needed
-      didRecoverRef.current = true;
+    if (isDirtyState) {
+      // Debounce: only fire if stuck for 2s. During a normal wallet account
+      // switch Phantom reconnects in <1s, cancelling this timer.
+      recoveryTimerRef.current = setTimeout(() => {
+        const now = Date.now();
+        const msSinceLastRecovery = now - lastRecoveryTimeRef.current;
+        // 5-second cooldown prevents looping when Phantom re-selects itself
+        if (msSinceLastRecovery < 5000) return;
+
+        lastRecoveryTimeRef.current = now;
+        console.warn(
+          "[WalletRecovery] adapter stuck in dirty state — resetting",
+          wallet.adapter.name
+        );
+        disconnect().catch(() => {});
+      }, 2000);
+    } else {
+      // State is healthy — cancel any pending recovery timer
+      if (recoveryTimerRef.current) {
+        clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = null;
+      }
     }
-  }, [connected]);
 
-  useEffect(() => {
-    if (
-      pastAutoConnectWindow &&
-      wallet !== null &&
-      !connected &&
-      !connecting &&
-      !didRecoverRef.current
-    ) {
-      // Adapter is stuck: selected wallet but failed to connect.
-      // disconnect() resets wallet→null, connected→false, and removes
-      // walletName from localStorage, so next manual click shows the modal.
-      didRecoverRef.current = true;
-      console.warn("[WalletRecovery] autoConnect left adapter in dirty state — resetting", wallet.adapter.name);
-      disconnect().catch(() => {});
-    }
-  }, [pastAutoConnectWindow, wallet, connected, connecting, disconnect]);
+    return () => {
+      if (recoveryTimerRef.current) {
+        clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = null;
+      }
+    };
+  }, [wallet, connected, connecting, disconnect]);
 
   return null;
 };

@@ -273,7 +273,7 @@ export default function DealPage() {
 
       const signature = result.signature;
 
-      // Sync the accepted deal to the database
+      // accept_deal txn successful -> push deal to deal table 
       try {
         const syncResponse = await fetch("/api/confirmDealAccepted", {
           method: "POST",
@@ -291,7 +291,6 @@ export default function DealPage() {
         }
       } catch (syncError) {
         console.error("Failed to sync deal to database:", syncError);
-        // Don't fail the whole operation if sync fails - cron will pick it up
       }
 
       setButtonState("success");

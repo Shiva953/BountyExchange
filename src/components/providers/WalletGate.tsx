@@ -30,6 +30,13 @@ export const WalletGate: FC<WalletGateProps> = ({ children }) => {
   const [isAutoConnecting, setIsAutoConnecting] = useState(false);
   const autoConnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Tracks whether the user was previously connected in this session.
+  // Used to show a brief loading state during wallet account switches
+  // instead of immediately flashing the "Connect Your Wallet" screen.
+  const prevConnectedRef = useRef(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const transitionTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // Prevent hydration mismatch and handle autoConnect timing
   useEffect(() => {
     setMounted(true);
@@ -61,6 +68,36 @@ export const WalletGate: FC<WalletGateProps> = ({ children }) => {
     }
   }, [connected, connecting]);
 
+  // Detect wallet switches: when the user was connected and `connected` drops
+  // to false (e.g. Phantom emits disconnect during account switch), show a
+  // brief loading state instead of immediately rendering the "Connect Your
+  // Wallet" screen. This prevents the deal page from unmounting/remounting
+  // during what is normally a sub-second transition.
+  useEffect(() => {
+    if (connected) {
+      prevConnectedRef.current = true;
+      setIsTransitioning(false);
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current);
+        transitionTimerRef.current = null;
+      }
+    } else if (!connected && !connecting && prevConnectedRef.current && mounted) {
+      // Was connected, now not — could be a wallet switch or intentional disconnect.
+      // Show loading for up to 1s; if the wallet reconnects we clear it early.
+      setIsTransitioning(true);
+      transitionTimerRef.current = setTimeout(() => {
+        setIsTransitioning(false);
+        prevConnectedRef.current = false;
+      }, 1000);
+    }
+
+    return () => {
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current);
+      }
+    };
+  }, [connected, connecting, mounted]);
+
   // Show loading until mounted (prevents hydration issues)
   if (!mounted) {
     return (
@@ -70,8 +107,8 @@ export const WalletGate: FC<WalletGateProps> = ({ children }) => {
     );
   }
 
-  // Connecting or autoConnecting - show loading
-  if (connecting || isAutoConnecting) {
+  // Connecting, autoConnecting, or briefly transitioning between wallets
+  if (connecting || isAutoConnecting || isTransitioning) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
         <div className="text-center max-w-md">
