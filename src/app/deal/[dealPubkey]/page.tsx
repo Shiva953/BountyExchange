@@ -229,7 +229,7 @@ export default function DealPage() {
     setButtonState("loading");
 
     try {
-      const response = await fetch("/api/acceptDeal", {
+      const response = await fetch("/api/deal/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

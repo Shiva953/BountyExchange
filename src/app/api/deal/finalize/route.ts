@@ -139,7 +139,7 @@ async function sendFinalizeTxWithRetry(
 }
 
 /**
- * POST /api/finalizeDeal
+ * POST /api/deal/finalize
  *
  * Finalizes a deal on-chain using a permissionless crank pattern.
  * This endpoint is designed to be called by the cron job when a deal

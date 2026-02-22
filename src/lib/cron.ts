@@ -131,7 +131,7 @@ async function callFinalizeDealAPI(
         process.env.VERCEL_URL ||
         "http://localhost:3000";
 
-      const response = await fetch(`${baseUrl}/api/finalizeDeal`, {
+      const response = await fetch(`${baseUrl}/api/deal/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

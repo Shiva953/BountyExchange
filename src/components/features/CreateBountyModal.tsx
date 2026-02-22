@@ -10,13 +10,7 @@ import { ArrowLeft, ArrowUpRight, CheckCircle2, Loader2, ChevronDown, Users, Ref
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +45,50 @@ interface BountyFormData {
 
 type TransactionStatus = "idle" | "building" | "signing" | "reconnecting" | "confirming" | "success" | "error";
 
+// Anchor program error codes mapping
+const PROGRAM_ERROR_MESSAGES: Record<number, string> = {
+  6000: "Invalid fee wallet",
+  6001: "Minimum reward amount is 200 USDC",
+  6002: "Only the targeted trader can accept this deal",
+  6003: "Deal is not active",
+  6004: "Deal has already been accepted",
+  6005: "Cannot create a bounty targeting yourself",
+  6006: "Deal has not been accepted yet",
+  6007: "Invalid creator account",
+  6008: "Invalid escrow vault",
+  6009: "Deal has expired",
+  6010: "Volume requirement not met",
+  6011: "Hold duration requirement not met",
+  6012: "Minimum buy volume must be less than target volume",
+  6013: "Token account owner does not match expected owner",
+  6014: "Duplicate accounts not allowed",
+  6015: "Expiration window must be at least 1 hour",
+  6016: "Hold duration must be at least 1 hour",
+  6017: "Expiration window exceeds maximum of 30 days",
+  6018: "Hold duration exceeds maximum of 30 days",
+  6019: "Target volume exceeds maximum",
+  6020: "Only admin can call this function",
+  6021: "Cannot withdraw before bounty expiration period ends",
+};
+
+// Extract error code from error message and return user-friendly message
+const getProgramErrorMessage = (errorMessage: string): string | null => {
+  const codeMatch = errorMessage.match(/(?:error code[:\s]*|custom program error[:\s]*0x)(\d+|[0-9a-fA-F]+)/i);
+  if (codeMatch) {
+    const code = codeMatch[1].startsWith('0x') || /^[a-fA-F]/.test(codeMatch[1])
+      ? parseInt(codeMatch[1], 16)
+      : parseInt(codeMatch[1], 10);
+    return PROGRAM_ERROR_MESSAGES[code] || null;
+  }
+  // Also check for direct error code mentions like "6001"
+  for (const [code, message] of Object.entries(PROGRAM_ERROR_MESSAGES)) {
+    if (errorMessage.includes(code)) {
+      return message;
+    }
+  }
+  return null;
+};
+
 export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) => {
   const { publicKey, signTransaction, connected } = useWallet();
   const { connection } = useConnection();
@@ -70,6 +108,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
   const [tradersLoading, setTradersLoading] = useState(false);
   const [tradersError, setTradersError] = useState<ApiError | null>(null);
   const [showTraderDropdown, setShowTraderDropdown] = useState(false);
+  const [holdDurationUnit, setHoldDurationUnit] = useState<"min" | "hrs">("hrs");
 
   // Fetch traders with retry logic
   const fetchTraders = useCallback(async () => {
@@ -147,14 +186,25 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       : null
     : null;
 
+  // Validate hold duration meets minimum (60 min or 1 hr)
+  const holdDurationError = formData.holdDuration
+    ? holdDurationUnit === "min"
+      ? parseFloat(formData.holdDuration) < 60
+        ? "Minimum 60 minutes"
+        : null
+      : parseFloat(formData.holdDuration) < 1
+        ? "Minimum 1 hour"
+        : null
+    : null;
+
   const isFormValid =
     formData.contractAddress &&
     formData.traderWallet &&
     formData.rewardAmount &&
     formData.volumeTarget &&
     formData.expirationWindow &&
-    formData.holdDuration &&
-    !minBuyVolumeError;
+    !minBuyVolumeError &&
+    !holdDurationError;
 
   const handleCreateBounty = useCallback(async () => {
     if (!publicKey || !signTransaction || !isFormValid) {
@@ -166,7 +216,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
     setTxSignature(null);
 
     try {
-      const response = await fetch("/api/createDeal", {
+      const response = await fetch("/api/deal/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -177,7 +227,9 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
           targetVolume: formData.volumeTarget,
           minBuyVolume: formData.minBuyVolume || undefined,
           expirationWindowInHours: formData.expirationWindow,
-          holdDurationInHours: formData.holdDuration,
+          holdDurationInHours: formData.holdDuration
+            ? (holdDurationUnit === "min" ? parseFloat(formData.holdDuration) / 60 : parseFloat(formData.holdDuration))
+            : 1, // Default to 1 hour minimum when not provided
         }),
       });
 
@@ -262,6 +314,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
           expirationWindow: "",
           holdDuration: "",
         });
+        setHoldDurationUnit("hrs");
         setTxStatus("idle");
         onClose();
       }, 1200);
@@ -285,20 +338,17 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       // Check for connection/network errors
       } else if (lowerMessage.includes("connection") || lowerMessage.includes("network") || lowerMessage.includes("fetch failed")) {
         toast.error("Connection failed", { description: "Please check your network and try again." });
-      // Check for RewardBelowMinimum error (code 6001)
-      } else if (errorMessage.includes("6001") || errorMessage.includes("RewardBelowMinimum") || errorMessage.includes("Minimum reward amount")) {
-        toast.error("Minimum reward amount is 200 USDC");
-      // Check for SelfTargetedDeal error (code 6005)
-      } else if (errorMessage.includes("6005") || errorMessage.includes("SelfTargetedDeal") || errorMessage.includes("targeting yourself")) {
-        toast.error("Cannot create a bounty targeting yourself");
-      // Check for MinBuyVolumeExceedsTarget error (code 6012)
-      } else if (errorMessage.includes("6012") || errorMessage.includes("MinBuyVolumeExceedsTarget") || errorMessage.includes("Minimum buy volume must be less than")) {
-        toast.error("Min buy size must be less than target volume");
       // Check for RPC service errors
       } else if (lowerMessage.includes("service") || lowerMessage.includes("unavailable") || lowerMessage.includes("rpc")) {
         toast.error("Service temporarily unavailable", { description: "Please try again in a moment." });
       } else {
-        toast.error(errorMessage);
+        // Check for program error codes and show human-readable message
+        const programError = getProgramErrorMessage(errorMessage);
+        if (programError) {
+          toast.error(programError);
+        } else {
+          toast.error(errorMessage);
+        }
       }
     }
   }, [publicKey, signTransaction, isFormValid, formData, connection, onClose]);
@@ -328,49 +378,54 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="max-w-7xl lg:max-w-[80rem] gap-4 p-6 bg-background rounded-none border-2 border-[#e84057]"
-        style={{ fontFamily: 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace' }}
-      >
-        <DialogHeader className="space-y-2">
-          <DialogTitle className="text-2xl tracking-tight text-primary">Bounty configuration</DialogTitle>
-                  </DialogHeader>
+      <DialogContent className="max-w-6xl lg:max-w-[72rem] gap-2 p-4 bg-zinc-950 rounded-2xl border border-zinc-800">
+        <DialogHeader className="space-y-1">
+          <DialogTitle className="text-xl tracking-tight text-white font-semibold font-sans">Bounty configuration</DialogTitle>
+        </DialogHeader>
 
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={onClose} className="gap-2 cursor-pointer tracking-tight font-sans">
-            <ArrowLeft className="size-4" />
+          <Button variant="ghost" size="sm" onClick={onClose} className="gap-1.5 cursor-pointer tracking-tight font-sans text-zinc-400 hover:text-white h-8 px-2">
+            <ArrowLeft className="size-3.5" />
             Back
           </Button>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground tracking-tight font-sans">Draft status</span>
+            <span className="text-xs text-zinc-500 tracking-tight font-sans">Draft status</span>
             <Badge
               variant={isFormValid ? "default" : "outline"}
-              className={`font-sans ${isFormValid ? "bg-emerald-500 text-emerald-950" : ""}`}
+              className={`font-sans text-xs ${isFormValid ? "bg-[#b4d429] text-black hover:bg-[#b4d429]" : "border-zinc-600 text-zinc-400"}`}
             >
               {isFormValid ? "Valid" : "Incomplete"}
             </Badge>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[2.1fr_1fr]">
-          <div className="space-y-4">
-            <Card className="rounded-none border-solid border-[#e84057]/30 bg-[#e84057]/5">
-              <CardHeader>
-                <CardTitle className="text-base tracking-tight font-sans">Token & Trader</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="contractAddress" className="tracking-tight font-sans">Token CA</Label>
+        <div className="grid gap-3 lg:grid-cols-[2.1fr_1fr]">
+          <div className="space-y-2">
+            <Card className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700">
+                    <Users className="w-3.5 h-3.5 text-zinc-400" />
+                  </div>
+                  <span className="text-sm font-semibold tracking-tight font-sans">Token & trader</span>
+                </div>
+                <Badge className="bg-white text-black hover:bg-white font-semibold text-[10px] px-2 py-0 font-sans">
+                  Required
+                </Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-0.5">
+                  <Label htmlFor="contractAddress" className="text-xs text-zinc-400 tracking-tight font-sans">Token CA</Label>
                   <Input
                     id="contractAddress"
-                    // placeholder="Paste CA..."
+                    placeholder="Paste contract address..."
                     value={formData.contractAddress}
                     onChange={(e) => handleInputChange("contractAddress", e.target.value)}
-                    className="rounded-none"
+                    className="rounded-lg bg-zinc-800 border-zinc-700 h-9 text-sm"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="traderWallet" className="tracking-tight font-sans">Target Trader</Label>
+                <div className="space-y-0.5">
+                  <Label htmlFor="traderWallet" className="text-xs text-zinc-400 tracking-tight font-sans">Target trader</Label>
                   <div className="relative">
                     <div className="flex gap-2">
                       <Input
@@ -378,20 +433,20 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                         placeholder="Wallet address..."
                         value={formData.traderWallet}
                         onChange={(e) => handleInputChange("traderWallet", e.target.value)}
-                        className="rounded-none flex-1"
+                        className="rounded-lg bg-zinc-800 border-zinc-700 h-9 text-sm flex-1"
                       />
                       <Button
                         type="button"
                         variant="outline"
                         onClick={() => setShowTraderDropdown(!showTraderDropdown)}
-                        className="rounded-none px-3 cursor-pointer"
+                        className="rounded-lg bg-zinc-800 border-zinc-700 px-2 cursor-pointer h-9"
                       >
-                        <Users className="w-4 h-4 mr-1" />
+                        <Users className="w-3.5 h-3.5 mr-1" />
                         <ChevronDown className={`w-3 h-3 transition-transform ${showTraderDropdown ? "rotate-180" : ""}`} />
                       </Button>
                     </div>
                     {showTraderDropdown && (
-                      <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-background border border-[#e84057]/30 shadow-lg">
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg">
                         {tradersLoading ? (
                           <>
                             {[1, 2, 3, 4].map((i) => (
@@ -436,7 +491,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                               handleInputChange("traderWallet", trader.address);
                               setShowTraderDropdown(false);
                             }}
-                            className="w-full px-3 py-2 text-left hover:bg-[#e84057]/10 transition-colors cursor-pointer flex items-center gap-3"
+                            className="w-full px-3 py-2 text-left hover:bg-zinc-800 transition-colors cursor-pointer flex items-center gap-3"
                           >
                             {trader.imageUrl ? (
                               <img
@@ -462,71 +517,87 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                     )}
                   </div>
                 </div>
-              </CardContent>
+              </div>
             </Card>
 
-            <Card className="rounded-none border-solid border-[#e84057]/30 bg-[#e84057]/5">
-              <CardHeader>
-                <CardTitle className="text-base tracking-tight font-sans">Reward & Conditions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="rewardAmount" className="tracking-tight font-sans">Reward ($)</Label>
-                    <Input
-                      id="rewardAmount"
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={formData.rewardAmount}
-                      onChange={(e) => handleInputChange("rewardAmount", e.target.value)}
-                      className="rounded-none"
-                    />
+            {/* Required section - Bounty details */}
+            <Card className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700">
+                    <span className="text-sm">$</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="volumeTarget" className="tracking-tight font-sans">Target Volume ($)</Label>
-                    <Input
-                      id="volumeTarget"
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={formData.volumeTarget}
-                      onChange={(e) => handleInputChange("volumeTarget", e.target.value)}
-                      className="rounded-none"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="minBuyVolume" className="tracking-tight font-sans">Min Buy Size ($) <span className="text-muted-foreground text-xs">(optional)</span></Label>
-                    <Input
-                      id="minBuyVolume"
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={formData.minBuyVolume}
-                      onChange={(e) => handleInputChange("minBuyVolume", e.target.value)}
-                      className={`rounded-none ${minBuyVolumeError ? "border-destructive" : ""}`}
-                    />
-                    {minBuyVolumeError && (
-                      <p className="text-xs text-destructive">{minBuyVolumeError}</p>
-                    )}
-                  </div>
+                  <span className="text-sm font-semibold tracking-tight font-sans">Bounty details</span>
                 </div>
+                <Badge className="bg-white text-black hover:bg-white font-semibold text-[10px] px-2 py-0 font-sans">
+                  Required
+                </Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 mb-2">
+                <div className="space-y-0.5">
+                  <Label htmlFor="rewardAmount" className="text-xs text-zinc-400 tracking-tight font-sans">Reward amount ($)</Label>
+                  <Input
+                    id="rewardAmount"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="5000"
+                    value={formData.rewardAmount}
+                    onChange={(e) => handleInputChange("rewardAmount", e.target.value)}
+                    className="rounded-lg bg-zinc-800 border-zinc-700 h-9 text-sm font-semibold"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <Label htmlFor="volumeTarget" className="text-xs text-zinc-400 tracking-tight font-sans">Volume target ($)</Label>
+                  <Input
+                    id="volumeTarget"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="2000"
+                    value={formData.volumeTarget}
+                    onChange={(e) => handleInputChange("volumeTarget", e.target.value)}
+                    className="rounded-lg bg-zinc-800 border-zinc-700 h-9 text-sm font-semibold"
+                  />
+                </div>
+              </div>
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-2">
+                <div className="flex items-center justify-between mb-1">
+                  <Label htmlFor="expirationWindow" className="text-xs text-zinc-400 tracking-tight font-sans">Expiration window</Label>
+                  <span className="text-xs text-zinc-500 font-sans">Time to complete</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="expirationWindow"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="72"
+                    value={formData.expirationWindow}
+                    onChange={(e) => handleInputChange("expirationWindow", e.target.value)}
+                    className="rounded-lg bg-zinc-900 border-zinc-700 h-9 text-sm font-semibold w-20"
+                  />
+                  <span className="text-xs text-zinc-400 font-semibold">hrs</span>
+                </div>
+              </div>
+            </Card>
 
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="expirationWindow" className="tracking-tight font-sans">Expiration Window (hrs)</Label>
-                    <Input
-                      id="expirationWindow"
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={formData.expirationWindow}
-                      onChange={(e) => handleInputChange("expirationWindow", e.target.value)}
-                      className="rounded-none"
-                    />
+            {/* Optional section - Trade settings */}
+            <Card className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700">
+                    <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="holdDuration" className="tracking-tight font-sans">Hold Duration (hrs)</Label>
+                  <span className="text-sm font-semibold tracking-tight font-sans">Trade settings</span>
+                </div>
+                <Badge variant="outline" className="border-zinc-600 text-zinc-400 font-semibold text-[10px] px-2 py-0 font-sans">
+                  Optional
+                </Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-0.5">
+                  <Label htmlFor="holdDuration" className="text-xs text-zinc-400 tracking-tight font-sans">Hold duration</Label>
+                  <div className="relative">
                     <Input
                       id="holdDuration"
                       type="number"
@@ -534,78 +605,111 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
                       placeholder="0"
                       value={formData.holdDuration}
                       onChange={(e) => handleInputChange("holdDuration", e.target.value)}
-                      className="rounded-none"
+                      className={`rounded-lg bg-zinc-800 border-zinc-700 h-9 text-sm font-semibold pr-20 ${holdDurationError ? "border-destructive" : ""}`}
                     />
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center bg-zinc-700 rounded h-7 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setHoldDurationUnit("min")}
+                        className={`px-2 h-6 rounded text-[10px] font-semibold transition-colors cursor-pointer ${holdDurationUnit === "min" ? "bg-white text-black" : "text-zinc-400 hover:text-zinc-200"}`}
+                      >
+                        MIN
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setHoldDurationUnit("hrs")}
+                        className={`px-2 h-6 rounded text-[10px] font-semibold transition-colors cursor-pointer ${holdDurationUnit === "hrs" ? "bg-white text-black" : "text-zinc-400 hover:text-zinc-200"}`}
+                      >
+                        HRS
+                      </button>
+                    </div>
                   </div>
+                  {holdDurationError && (
+                    <p className="text-xs text-destructive">{holdDurationError}</p>
+                  )}
                 </div>
-              </CardContent>
+                <div className="space-y-0.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="minBuyVolume" className="text-xs text-zinc-400 tracking-tight font-sans">Min buy size ($)</Label>
+                    <span className="text-xs text-zinc-500 font-sans">Per tx</span>
+                  </div>
+                  <Input
+                    id="minBuyVolume"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={formData.minBuyVolume}
+                    onChange={(e) => handleInputChange("minBuyVolume", e.target.value)}
+                    className={`rounded-lg bg-zinc-800 border-zinc-700 h-9 text-sm font-semibold ${minBuyVolumeError ? "border-destructive" : ""}`}
+                  />
+                  {minBuyVolumeError && (
+                    <p className="text-xs text-destructive">{minBuyVolumeError}</p>
+                  )}
+                </div>
+              </div>
             </Card>
           </div>
 
-          <div className="space-y-4">
-            <Card className="rounded-none border-solid border-[#e84057]/30 bg-[#e84057]/5">
-              <CardHeader className="space-y-3">
-                <div className="flex items-center gap-2 text-primary">
-                  <CheckCircle2 className="size-4" />
-                  <CardTitle className="text-sm tracking-tight">Bounty summary</CardTitle>
+          <div className="space-y-2">
+            <Card className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center justify-center w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-zinc-400" />
                 </div>
-                <CardDescription className="text-xs">
-                  Review totals before initializing escrow.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm tracking-tight">
-                    <span className="text-muted-foreground">Base reward</span>
-                    <span className="font-semibold">${formData.rewardAmount || "0"}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm tracking-tight">
-                    <span className="text-muted-foreground">Protocol tax (10%)</span>
-                    <span className="font-semibold">${protocolTax}</span>
-                  </div>
+                <div>
+                  <span className="text-sm font-semibold tracking-tight font-sans">Bounty summary</span>
+                  <p className="text-xs text-zinc-500">Review before initializing.</p>
                 </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-xs tracking-tight text-muted-foreground">
-                      Total Escrow
-                    </p>
-                    <p className="text-3xl font-bold leading-none tracking-tight">${totalEscrow}</p>
-                  </div>
-                  <Badge variant="secondary">Devnet</Badge>
+              </div>
+              <div className="space-y-1.5 rounded-lg bg-zinc-800/50 p-2 border border-zinc-700 mb-2">
+                <div className="flex items-center justify-between text-xs tracking-tight">
+                  <span className="text-zinc-400">Base reward</span>
+                  <span className="font-semibold">${formData.rewardAmount || "0"}</span>
                 </div>
+                <div className="flex items-center justify-between text-xs tracking-tight">
+                  <span className="text-zinc-400">Protocol tax (10%)</span>
+                  <span className="font-semibold">${protocolTax}</span>
+                </div>
+              </div>
 
-                <Button
-                  size="lg"
-                  className="w-full cursor-pointer tracking-tight"
-                  disabled={isButtonDisabled}
-                  onClick={handleCreateBounty}
-                >
-                  {["building", "signing", "reconnecting", "confirming"].includes(txStatus) && (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  )}
-                  {txStatus === "success" && <CheckCircle2 className="mr-2 size-4" />}
-                  {getButtonText()}
-                </Button>
+              <Separator className="bg-zinc-700 mb-2" />
 
-                {txSignature && txStatus === "success" && (
-                  <Button
-                    variant="link"
-                    asChild
-                    className="px-0 text-sm font-semibold text-primary cursor-pointer tracking-tight"
-                  >
-                    <a
-                      href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      View on Explorer
-                    </a>
-                  </Button>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-xs tracking-tight text-zinc-500">Total escrow</p>
+                  <p className="text-xl font-bold leading-none tracking-tight">${totalEscrow}</p>
+                </div>
+                <Badge variant="secondary" className="bg-zinc-800 text-zinc-300 text-[10px]">Devnet</Badge>
+              </div>
+
+              <Button
+                size="sm"
+                className="w-full cursor-pointer tracking-tighter rounded-lg h-9 bg-white text-black hover:bg-zinc-200 font-semibold text-sm font-sans"
+                disabled={isButtonDisabled}
+                onClick={handleCreateBounty}
+              >
+                {["building", "signing", "reconnecting", "confirming"].includes(txStatus) && (
+                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
                 )}
-              </CardContent>
+                {txStatus === "success" && <CheckCircle2 className="mr-1.5 size-3.5" />}
+                {getButtonText()}
+              </Button>
+
+              {txSignature && txStatus === "success" && (
+                <Button
+                  variant="link"
+                  asChild
+                  className="px-0 text-xs font-semibold text-[#b4d429] cursor-pointer tracking-tight h-auto py-0 mt-1"
+                >
+                  <a
+                    href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View on Explorer
+                  </a>
+                </Button>
+              )}
             </Card>
           </div>
         </div>

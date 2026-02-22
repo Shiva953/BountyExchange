@@ -424,6 +424,196 @@ export type BountyExchangeProgram = {
           }
         }
       ]
+    },
+    {
+      "name": "withdrawFromEscrow",
+      "docs": [
+        "ADMIN-ONLY: Emergency withdrawal of stuck funds from escrow.",
+        "Only callable by the hardcoded ADMIN pubkey for reimbursement purposes."
+      ],
+      "discriminator": [
+        235,
+        206,
+        216,
+        253,
+        47,
+        163,
+        169,
+        231
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "docs": [
+            "Admin signer - MUST be the hardcoded ADMIN pubkey",
+            "This is a security-critical check to prevent unauthorized withdrawals"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "creator",
+          "writable": true
+        },
+        {
+          "name": "deal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "account",
+                "path": "deal.deal_id",
+                "account": "deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrowVault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "deal"
+              },
+              {
+                "kind": "account",
+                "path": "tokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "usdcMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "adminTokenAccount",
+          "docs": [
+            "Admin's token account to receive the withdrawn funds"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "admin"
+              },
+              {
+                "kind": "account",
+                "path": "tokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "usdcMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdcMint"
+        },
+        {
+          "name": "tokenProgram"
+        },
+        {
+          "name": "associatedTokenProgram",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -506,6 +696,51 @@ export type BountyExchangeProgram = {
       "code": 6012,
       "name": "minBuyVolumeExceedsTarget",
       "msg": "Minimum buy volume must be less than target volume"
+    },
+    {
+      "code": 6013,
+      "name": "invalidTokenAccountOwner",
+      "msg": "Token account owner does not match expected owner"
+    },
+    {
+      "code": 6014,
+      "name": "duplicateAccounts",
+      "msg": "Duplicate accounts not allowed"
+    },
+    {
+      "code": 6015,
+      "name": "expirationTooShort",
+      "msg": "Expiration window must be at least 1 hour"
+    },
+    {
+      "code": 6016,
+      "name": "holdDurationTooShort",
+      "msg": "Hold duration must be at least 1 hour"
+    },
+    {
+      "code": 6017,
+      "name": "expirationTooLong",
+      "msg": "Expiration window exceeds maximum of 30 days"
+    },
+    {
+      "code": 6018,
+      "name": "holdDurationTooLong",
+      "msg": "Hold duration exceeds maximum of 30 days"
+    },
+    {
+      "code": 6019,
+      "name": "targetVolumeTooHigh",
+      "msg": "Target volume exceeds maximum"
+    },
+    {
+      "code": 6020,
+      "name": "unauthorizedAdmin",
+      "msg": "Only admin can call this function"
+    },
+    {
+      "code": 6021,
+      "name": "withdrawBeforeExpiration",
+      "msg": "Cannot withdraw before bounty expiration period ends"
     }
   ],
   "types": [
