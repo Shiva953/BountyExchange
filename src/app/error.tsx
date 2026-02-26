@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function Error({
   error,
@@ -10,15 +10,22 @@ export default function Error({
   reset: () => void;
 }) {
   const hasAutoReset = useRef(false);
+  // Start with spinner hidden error UI — only reveal if auto-reset doesn't clear it in time.
+  const [showError, setShowError] = useState(false);
 
   useEffect(() => {
     console.error("[AppError]", error);
   }, [error]);
 
-  // Auto-recover once per error boundary mount — handles wallet switch race conditions silently.
-  // By 500ms the wallet transition is almost always complete, so reset() succeeds without user action.
-  // If reset() throws again, the boundary remounts with a fresh ref and tries once more.
-  // After the wallet finishes switching this resolves; if it's a real error the UI fallback below is shown.
+  // Reveal the error UI after 500ms. If reset() succeeds before then, the component
+  // unmounts and the user never sees the error screen at all.
+  useEffect(() => {
+    const timer = setTimeout(() => setShowError(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Auto-recover once per error boundary mount — handles wallet switch race conditions.
+  // By 500ms the wallet transition is almost always complete, so reset() succeeds silently.
   useEffect(() => {
     if (!hasAutoReset.current) {
       hasAutoReset.current = true;
@@ -26,6 +33,14 @@ export default function Error({
       return () => clearTimeout(timer);
     }
   }, [reset]);
+
+  if (!showError) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" />
+      </div>
+    );
+  }
 
   const isWalletError =
     error.message?.toLowerCase().includes("wallet") ||

@@ -776,24 +776,6 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
     }
   }, [connected, publicKey, isOwnProfile, router, currentWalletAddress]);
 
-  // Don't render during wallet transition to prevent errors
-  if (isWalletTransitioning) {
-    return (
-      <main className="min-h-screen pt-24 px-6 bg-black pl-28">
-        <div className="max-w-6xl mt-6 mx-auto">
-          <div className="flex items-center justify-center min-h-[50vh]">
-            <Loader2 className="w-8 h-8 animate-spin text-zinc-500" />
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // Don't render content if viewing another wallet's deals page (redirect in progress)
-  if (connected && publicKey && !isOwnProfile) {
-    return null;
-  }
-
   // Unfiltered lists for lifetime stats (not affected by search/filter)
   const { allActiveDeals, allCompletedDeals } = useMemo(() => {
     const now = Date.now() / 1000;
@@ -945,6 +927,24 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
 
     return total;
   }, [allActiveDeals, allCompletedDeals, volumes]);
+
+  // Don't render during wallet transition to prevent errors
+  if (isWalletTransitioning) {
+    return (
+      <main className="min-h-screen pt-24 px-6 bg-black pl-28">
+        <div className="max-w-6xl mt-6 mx-auto">
+          <div className="flex items-center justify-center min-h-[50vh]">
+            <Loader2 className="w-8 h-8 animate-spin text-zinc-500" />
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Don't render content if viewing another wallet's deals page (redirect in progress)
+  if (connected && publicKey && !isOwnProfile) {
+    return null;
+  }
 
   return (
     <main className="min-h-screen pt-24 px-6 bg-black pl-28">
