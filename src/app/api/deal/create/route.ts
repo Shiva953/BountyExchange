@@ -128,8 +128,6 @@ export async function POST(request: NextRequest) {
       })
       .toString("base64");
 
-    // Deal syncs to DB when trader accepts via /api/confirmDealAccepted
-
     return NextResponse.json({
       success: true,
       transaction: serializedTransaction,

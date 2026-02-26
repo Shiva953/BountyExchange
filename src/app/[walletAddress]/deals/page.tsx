@@ -451,11 +451,15 @@ function DealCard({ deal, isCompleted = false, volumeUSD = 0, volumeLoading = fa
   // Get outcome from deal for completed deals
   // If no outcome from DB, derive from volume — but only once volume is loaded
   const targetVolumeForOutcome = Number(deal.targetVolume) / 10 ** USDC_DECIMALS;
-  const outcome = deal.outcome ?? (isCompleted && !deal.isActive ? null : undefined);
+  // Keep outcome as-is: undefined = no DB data (on-chain fallback), null = DB confirmed but not yet set
+  const outcome = deal.outcome;
   const derivedOutcome = (() => {
-    if (outcome) return outcome;
+    // Definitive outcome from DB — use it directly
+    if (outcome === "won" || outcome === "lost") return outcome;
     if (!isCompleted) return undefined;
-    // Don't derive while volume is still loading (would always show FAIL)
+    // outcome is undefined: on-chain fallback, no DB data at all — can't derive
+    if (outcome === undefined) return undefined;
+    // outcome is null from DB (deal closed but outcome not yet written) — derive from volume
     if (volumeLoading && deal.volumeCompleted === undefined) return undefined;
     const vol = deal.volumeCompleted !== undefined ? deal.volumeCompleted : volumeUSD;
     return vol >= targetVolumeForOutcome ? "won" : "lost";
@@ -747,19 +751,30 @@ export default function MyDealsPage({ params }: MyDealsPageProps) {
     }
   }, [isOwnProfile]);
 
-  // Redirect to home page when wallet is disconnected while on own profile
+  // Handle navigation based on wallet connection state changes
   useEffect(() => {
-    if (!connected && wasOwnProfileRef.current) {
-      router.push("/");
+    // Case 1: Wallet disconnected while on own profile.
+    // Delay the redirect to distinguish a real disconnect from a wallet switch
+    // (wallet adapters often briefly disconnect before reconnecting with the new wallet).
+    // The cleanup function cancels the timer if a new wallet connects before it fires.
+    if (!connected && !publicKey && wasOwnProfileRef.current) {
+      const timer = setTimeout(() => {
+        router.push("/");
+      }, 1200);
+      return () => clearTimeout(timer);
     }
-  }, [connected, router]);
 
-  // Redirect if trying to view another wallet's deals page
-  useEffect(() => {
+    // Case 2: A wallet is connected but we're not on our own profile page.
     if (connected && publicKey && !isOwnProfile) {
-      router.push("/");
+      if (wasOwnProfileRef.current) {
+        // Was on own profile → wallet switched → go to new wallet's deals page
+        router.push(`/${currentWalletAddress}/deals`);
+      } else {
+        // Directly navigated to another wallet's page → go home
+        router.push("/");
+      }
     }
-  }, [connected, publicKey, isOwnProfile, router]);
+  }, [connected, publicKey, isOwnProfile, router, currentWalletAddress]);
 
   // Don't render during wallet transition to prevent errors
   if (isWalletTransitioning) {

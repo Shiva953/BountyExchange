@@ -90,8 +90,6 @@ export async function POST(request: NextRequest) {
       })
       .toString("base64");
 
-    // Frontend calls /api/confirmDealAccepted after tx confirms to sync to DB
-
     return NextResponse.json({
       success: true,
       transaction: serializedTransaction,

@@ -5,22 +5,9 @@
  */
 
 import { cache } from "./redis";
+import { SSEEventType, SSEEvent } from "@/types/sse";
 
-// SSE Event Types
-export type SSEEventType = "volume_update" | "milestone" | "finalized" | "heartbeat" | "connected";
-
-export interface SSEEvent {
-  type: SSEEventType;
-  dealPublicKey: string;
-  data: {
-    volumeUSD?: number;
-    totalVolume?: number;
-    progress?: number;
-    milestone?: 25 | 50 | 75 | 90;
-    outcome?: "won" | "lost";
-    timestamp: number;
-  };
-}
+export type { SSEEventType, SSEEvent };
 
 // Channel name for Redis Pub/Sub
 const CHANNEL_PREFIX = "deal-updates";

@@ -6,6 +6,7 @@ import { Transaction } from "@solana/web3.js";
 import { sendTransactionWithRetry } from "@/utils/sendTransactionWithRetry";
 import { signTransactionWithRetry } from "@/utils/signTransactionWithRetry";
 import { extractApiError, type ApiError } from "@/hooks/useApiError";
+import { Trader } from "@/types/trader";
 import { ArrowLeft, ArrowUpRight, CheckCircle2, Loader2, ChevronDown, Users, RefreshCw, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -26,12 +27,6 @@ interface CreateBountyModalProps {
   onClose: () => void;
 }
 
-interface Trader {
-  id: number;
-  name: string;
-  address: string;
-  imageUrl: string | null;
-}
 
 interface BountyFormData {
   contractAddress: string;
@@ -280,7 +275,7 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
       const signature = result.signature;
 
       // Confirm creator in DB (fire-and-forget, don't block success)
-      fetch("/api/confirmDealCreated", {
+      fetch("/api/deal/confirmDealCreated", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ creatorAddress: publicKey.toBase58() }),

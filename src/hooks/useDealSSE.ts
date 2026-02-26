@@ -1,41 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import {
+  SSEEvent,
+  UseDealSSEOptions,
+  UseDealSSEReturn,
+} from "@/types/sse";
 
-type SSEEventType = "volume_update" | "milestone" | "finalized" | "heartbeat" | "connected";
-
-interface SSEEventData {
-  volumeUSD?: number;
-  totalVolume?: number;
-  progress?: number;
-  milestone?: 25 | 50 | 75 | 90;
-  outcome?: "won" | "lost";
-  timestamp: number;
-}
-
-interface SSEEvent {
-  type: SSEEventType;
-  dealPublicKey: string;
-  data: SSEEventData;
-}
-
-export interface UseDealSSEOptions {
-  dealPublicKeys: string[];
-  onVolumeUpdate?: (dealKey: string, volumeUSD: number, progress: number) => void;
-  onMilestone?: (dealKey: string, milestone: 25 | 50 | 75 | 90) => void;
-  onFinalized?: (dealKey: string, outcome: "won" | "lost") => void;
-  onEvent?: (event: SSEEvent) => void;
-  enabled?: boolean;
-  reconnectDelay?: number;
-  maxReconnectAttempts?: number;
-}
-
-export interface UseDealSSEReturn {
-  connected: boolean;
-  error: Error | null;
-  reconnect: () => void;
-  disconnect: () => void;
-}
+export type { UseDealSSEOptions, UseDealSSEReturn };
 
 // SSE disabled in dev by default - set NEXT_PUBLIC_ENABLE_SSE=true to enable
 const isSSEEnabled = () => {

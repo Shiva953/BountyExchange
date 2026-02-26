@@ -2,17 +2,13 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Search, Grid3x3, Zap } from "lucide-react";
+import { Trader as BaseTrader } from "@/types/trader";
 
 const MONO_FONT = 'GeistMono, ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
 
-interface Trader {
-  id: number;
-  name: string;
-  address: string;
-  imageUrl: string | null;
-  volumeCompleted: number;
+// Extends the shared Trader with the completionPercentage display field
+interface Trader extends BaseTrader {
   completionPercentage: number;
-  activeBounties: number;
 }
 
 function formatVolume(amount: number): string {

@@ -7,14 +7,10 @@ import { BN } from "@coral-xyz/anchor";
 import { getProgram } from "@/program/instructions/createDeal";
 import { DealWithMetadata } from "./useDealsForTrader";
 import { fetchTokenMetadata, TokenMetadata } from "@/utils/tokenMetadata";
-import { TraderDealResponse, TraderDataResponse } from "@/app/api/getTraderDeals/route";
+import { TraderDealResponse, TraderDataResponse } from "@/types/api";
+import { TraderData } from "@/types/trader";
 
-export interface TraderData {
-  name: string | null;
-  imageUrl: string | null;
-  volumeCompleted: number;
-  activeBounties: number;
-}
+export type { TraderData };
 
 type DataSource = "db" | "onchain" | null;
 
@@ -95,7 +91,7 @@ export function useTraderDeals(walletAddress: string | null) {
     }
 
     try {
-      const response = await fetch(`/api/getTraderDeals?address=${walletAddress}`);
+      const response = await fetch(`/api/deal/getTraderDeals?address=${walletAddress}`);
       const data = await response.json();
 
       if (!response.ok) {

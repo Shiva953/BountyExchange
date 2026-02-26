@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export default function Error({
   error,
@@ -9,9 +9,23 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const hasAutoReset = useRef(false);
+
   useEffect(() => {
     console.error("[AppError]", error);
   }, [error]);
+
+  // Auto-recover once per error boundary mount — handles wallet switch race conditions silently.
+  // By 500ms the wallet transition is almost always complete, so reset() succeeds without user action.
+  // If reset() throws again, the boundary remounts with a fresh ref and tries once more.
+  // After the wallet finishes switching this resolves; if it's a real error the UI fallback below is shown.
+  useEffect(() => {
+    if (!hasAutoReset.current) {
+      hasAutoReset.current = true;
+      const timer = setTimeout(reset, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [reset]);
 
   const isWalletError =
     error.message?.toLowerCase().includes("wallet") ||

@@ -2,39 +2,11 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
 import { getProgram } from "@/program/instructions/createDeal";
-import { BN } from "@coral-xyz/anchor";
-import { fetchTokenMetadata, TokenMetadata } from "@/utils/tokenMetadata";
+import { fetchTokenMetadata } from "@/utils/tokenMetadata";
+import { DealAccount, DealWithMetadata } from "@/types/deals";
 
-export type { TokenMetadata };
-
-export interface DealAccount {
-  publicKey: PublicKey;
-  dealId: BN;
-  creator: PublicKey;
-  token: PublicKey;
-  trader: PublicKey;
-  rewardAmount: BN;
-  targetVolume: BN;
-  minBuyVolume: BN | null;
-  expirationWindowInHours: BN;
-  holdDurationInHours: BN;
-  escrowVault: PublicKey;
-  bump: number;
-  createdAt: BN;
-  isActive: boolean;
-  isAccepted: boolean;
-}
-
-export interface DealWithMetadata extends DealAccount {
-  tokenMetadata: TokenMetadata | null;
-  // DB-only fields (not available on-chain)
-  outcome?: "won" | "lost" | "expired_unfulfilled" | null;
-  volumeCompleted?: number;
-  expiresAt?: Date | null;
-  finalizedAt?: Date | null;
-}
+export type { DealAccount, DealWithMetadata };
 
 export function useDealsForTrader() {
   const { connection } = useConnection();

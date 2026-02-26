@@ -2,21 +2,9 @@
 
 import { useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
+import { ApiError } from "@/lib/errors";
 
-// Mirror the API error structure from backend
-export interface ApiError {
-  message: string;
-  code:
-    | "CONNECTION_ERROR"
-    | "RPC_FORBIDDEN"
-    | "RPC_RATE_LIMITED"
-    | "RPC_ERROR"
-    | "VALIDATION_ERROR"
-    | "AUTH_ERROR"
-    | "UNKNOWN";
-  retryable: boolean;
-  retryAfter?: number;
-}
+export type { ApiError };
 
 export interface UseApiErrorOptions {
   maxRetries?: number;

@@ -273,9 +273,8 @@ export default function DealPage() {
 
       const signature = result.signature;
 
-      // accept_deal txn successful -> push deal to deal table 
       try {
-        const syncResponse = await fetch("/api/confirmDealAccepted", {
+        const syncResponse = await fetch("/api/deal/confirmDealAccepted", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

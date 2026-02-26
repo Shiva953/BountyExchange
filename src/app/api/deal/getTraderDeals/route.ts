@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { TraderDealResponse, TraderDataResponse } from "@/types/api";
+
+export type { TraderDealResponse, TraderDataResponse };
 
 // Helper function to check if error is a database connection error
 function isDbConnectionError(error: unknown): boolean {
@@ -50,36 +53,6 @@ async function retryWithBackoff<T>(
   throw lastError;
 }
 
-export interface TraderDealResponse {
-  id: number;
-  publicKey: string;
-  dealId: string;
-  creator: string;
-  token: string;
-  traderAddress: string;
-  rewardAmount: string;
-  targetVolume: string;
-  minBuyVolume: string | null;
-  expirationHours: number;
-  holdDurationHours: number;
-  escrowVault: string;
-  createdAt: string;
-  acceptedAt: string | null;
-  expiresAt: string | null;
-  isActive: boolean;
-  isAccepted: boolean;
-  volumeCompleted: string | null;
-  outcome: string | null;
-}
-
-export interface TraderDataResponse {
-  id: number;
-  name: string | null;
-  address: string;
-  imageUrl: string | null;
-  volumeCompleted: number;
-  activeBounties: number;
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

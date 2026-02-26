@@ -3,35 +3,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { extractApiError } from "./useApiError";
+import { VolumeData, VolumeRequest, BatchVolumeResult } from "@/types/volume";
 
-interface VolumeData {
-  volumeUSD: number;
-  totalVolume: number;
-  totalSwapTransactions: number;
-  tokenPrice: number | null;
-  progress?: number; // Percentage progress towards target
-  lastUpdated?: number; // Timestamp of last update
-  isStale?: boolean; // True if this is cached data being revalidated
-}
-
-interface VolumeRequest {
-  walletAddress: string;
-  tokenMint: string;
-  startTime?: number;
-  minBuyVolume?: number; // Minimum buy volume in USD - only count swaps >= this value
-  key: string; // unique identifier for this request (e.g., dealPubkey)
-  targetVolume?: number; // Target volume for progress calculation
-}
-
-interface BatchVolumeResult {
-  volumes: Map<string, VolumeData>;
-  loading: boolean;
-  loadingKeys: Set<string>;
-  errors: Map<string, string>;
-  refetch: () => void;
-  sseConnected: boolean; // Whether SSE is connected for real-time updates
-  isRevalidating: boolean; // True when refreshing stale data in background
-}
+export type { VolumeData, VolumeRequest, BatchVolumeResult };
 
 const BATCH_SIZE = 10; // Send up to 10 requests per batch API call
 const POLL_INTERVAL = 5000; // Poll every 5 seconds
@@ -85,7 +59,7 @@ export function useBatchVolumeProgress(
     if (!forceRevalidate) {
       try {
         const dbKeys = pendingRequests.map((r) => r.key);
-        const dbResponse = await fetch("/api/deals/volumes", {
+        const dbResponse = await fetch("/api/deal/volumes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dealPublicKeys: dbKeys }),
@@ -300,7 +274,7 @@ export function useBatchVolumeProgress(
       }
 
       try {
-        const response = await fetch("/api/deals/volumes", {
+        const response = await fetch("/api/deal/volumes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ dealPublicKeys }),

@@ -6,6 +6,10 @@ import { PublicKey, Connection } from "@solana/web3.js";
 import { getProgram } from "@/program/instructions/createDeal";
 import { BN } from "@coral-xyz/anchor";
 import { fetchTokenMetadata, TokenMetadata } from "@/utils/tokenMetadata";
+import { CreatedDealWithMetadata } from "@/types/deals";
+import { SponsorDealResponse, SponsorDealsAPIResponse } from "@/types/api";
+
+export type { CreatedDealWithMetadata };
 
 // Fetch escrow balances directly from on-chain
 async function fetchEscrowBalances(
@@ -36,65 +40,6 @@ async function fetchEscrowBalances(
   return totalEscrow;
 }
 
-export interface CreatedDealAccount {
-  publicKey: PublicKey;
-  dealId: BN;
-  creator: PublicKey;
-  token: PublicKey;
-  trader: PublicKey;
-  rewardAmount: BN;
-  targetVolume: BN;
-  minBuyVolume: BN | null;
-  expirationWindowInHours: BN;
-  holdDurationInHours: BN;
-  escrowVault: PublicKey;
-  bump: number;
-  createdAt: BN;
-  isActive: boolean;
-  isAccepted: boolean;
-}
-
-export interface CreatedDealWithMetadata extends CreatedDealAccount {
-  tokenMetadata: TokenMetadata | null;
-  traderName?: string | null;
-  status: "executing" | "satisfied" | "failed" | "awaiting";
-}
-
-// API response types
-interface APIDeal {
-  publicKey: string;
-  dealId: string;
-  creator: string;
-  token: string;
-  traderAddress: string;
-  rewardAmount: number;
-  targetVolume: number;
-  minBuyVolume: number | null;
-  expirationHours: number;
-  holdDurationHours: number;
-  escrowVault: string;
-  createdAt: string;
-  acceptedAt: string | null;
-  expiresAt: string | null;
-  isActive: boolean;
-  isAccepted: boolean;
-  volumeCompleted: number;
-  outcome: string | null;
-  status: "executing" | "satisfied" | "failed" | "awaiting";
-  traderName: string | null;
-  traderImageUrl: string | null;
-}
-
-interface APIResponse {
-  success: boolean;
-  deals: APIDeal[];
-  stats: {
-    totalEscrow: number;
-    activeCampaigns: number;
-    contractors: number;
-  };
-  error?: string;
-}
 
 // Check if a deal is expired (for on-chain deals without acceptance)
 function isDealExpired(createdAt: number, expirationHours: number): boolean {
@@ -107,7 +52,7 @@ function isDealExpired(createdAt: number, expirationHours: number): boolean {
 
 // Convert API deal to CreatedDealWithMetadata format
 function apiDealToCreatedDeal(
-  apiDeal: APIDeal,
+  apiDeal: SponsorDealResponse,
   tokenMetadata: TokenMetadata | null
 ): CreatedDealWithMetadata {
   return {
@@ -183,7 +128,7 @@ export function useCreatedDeals() {
     try {
       // Step 1: Fetch accepted deals from DB (fast)
       const dbDealsPromise = fetch(`/api/sponsor/deals?creator=${publicKey.toBase58()}`)
-        .then((res) => res.json() as Promise<APIResponse>);
+        .then((res) => res.json() as Promise<SponsorDealsAPIResponse>);
 
       // Step 2: Fetch on-chain deals to get awaiting (unaccepted) deals
       // This is needed because unaccepted deals are not in the DB
