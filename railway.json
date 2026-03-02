@@ -39,6 +39,11 @@
       "schedule": "0 * * * *",
       "endpoint": "/api/cron?job=mark-orphaned",
       "timeoutSeconds": 60
+    },
+    {
+      "schedule": "* * * * *",
+      "endpoint": "/api/cron?job=check-new-bounties",
+      "timeoutSeconds": 60
     }
   ]
 }

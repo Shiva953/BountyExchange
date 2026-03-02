@@ -18,7 +18,7 @@ import {
 const FINALIZE_CHECK_INTERVAL = "* * * * *";
 const TRADER_STATS_INTERVAL = "*/3 * * * *"; // Every 3 min (reduced from 2 to lower Helius load)
 const RECONCILE_INTERVAL = "1-59/3 * * * *"; // Every 3 min, offset by 1 min to not overlap with stats sync
-const NEW_BOUNTY_CHECK_INTERVAL = "2-59/3 * * * *"; // Every 3 min, offset by 2 min
+const NEW_BOUNTY_CHECK_INTERVAL = "* * * * *"; // Every 1 min (backup; primary path is event-driven via confirmDealCreated)
 const CLEANUP_INTERVAL = "0 * * * *";
 
 const MAX_RETRIES = 3;

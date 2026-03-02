@@ -274,11 +274,19 @@ export const CreateBountyModal = ({ isOpen, onClose }: CreateBountyModalProps) =
 
       const signature = result.signature;
 
-      // Confirm creator in DB (fire-and-forget, don't block success)
+      // Confirm creator in DB and immediately notify the targeted trader (fire-and-forget)
       fetch("/api/deal/confirmDealCreated", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creatorAddress: publicKey.toBase58() }),
+        body: JSON.stringify({
+          creatorAddress: publicKey.toBase58(),
+          dealPubkey: data.dealPDA,
+          traderAddress: formData.traderWallet,
+          token: formData.contractAddress,
+          targetVolume: parseFloat(formData.volumeTarget),
+          rewardAmount: parseFloat(formData.rewardAmount),
+          expirationWindowInHours: parseFloat(formData.expirationWindow),
+        }),
       }).catch((err) => console.error("Failed to confirm creator:", err));
 
       setTxStatus("success");

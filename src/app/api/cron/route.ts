@@ -6,11 +6,12 @@ import {
   runCleanup,
   markOrphanedDeals,
   reconcileOnChainState,
+  checkAndNotifyNewBounties,
 } from "@/lib/cron";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
-type CronJob = "sync-volumes" | "check-expired" | "sync-traders" | "cleanup" | "mark-orphaned" | "reconcile";
+type CronJob = "sync-volumes" | "check-expired" | "sync-traders" | "cleanup" | "mark-orphaned" | "reconcile" | "check-new-bounties";
 
 const jobHandlers: Record<CronJob, () => Promise<void>> = {
   "sync-volumes": syncDealVolumes,
@@ -19,6 +20,7 @@ const jobHandlers: Record<CronJob, () => Promise<void>> = {
   cleanup: runCleanup,
   "mark-orphaned": markOrphanedDeals,
   reconcile: reconcileOnChainState,
+  "check-new-bounties": checkAndNotifyNewBounties,
 };
 
 /**
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest) {
 
   if (!job || !jobHandlers[job]) {
     return NextResponse.json(
-      { error: "Invalid job. Use: sync-volumes, check-expired, sync-traders, cleanup, mark-orphaned, reconcile" },
+      { error: "Invalid job. Use: sync-volumes, check-expired, sync-traders, cleanup, mark-orphaned, reconcile, check-new-bounties" },
       { status: 400 }
     );
   }
