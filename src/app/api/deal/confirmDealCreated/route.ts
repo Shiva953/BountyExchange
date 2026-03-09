@@ -28,7 +28,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate address format
     try {
       new PublicKey(creatorAddress);
     } catch {

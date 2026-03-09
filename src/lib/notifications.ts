@@ -99,6 +99,8 @@ function formatTimeRemaining(expiresAt: Date): string {
   return `${minutes}m`;
 }
 
+const USDC_DECIMALS = 9;
+
 // Helper: format USD amount
 function formatUSD(amount: number): string {
   return amount.toLocaleString("en-US", {
@@ -359,7 +361,7 @@ export async function sendDailySummaries() {
     if (trader.deals.length === 0) continue;
 
     const dealSummaries = await Promise.all(trader.deals.map(async (deal) => {
-      const target = Number(deal.targetVolume);
+      const target = Number(deal.targetVolume) / 10 ** USDC_DECIMALS;
       const completed = Number(deal.volumeCompleted ?? 0);
       const percent = target > 0 ? (completed / target) * 100 : 0;
       const timeLeft = deal.expiresAt
@@ -375,12 +377,12 @@ export async function sendDailySummaries() {
         `${status} ${tokenDisplay}\n` +
         `   ${progressBar} ${percent.toFixed(0)}%\n` +
         `   $${formatUSD(completed)} / $${formatUSD(target)}\n` +
-        `   ⏰ ${timeLeft} | 💰 $${formatUSD(Number(deal.rewardAmount))}`
+        `   ⏰ ${timeLeft} | 💰 $${formatUSD(Number(deal.rewardAmount) / 10 ** USDC_DECIMALS)}`
       );
     }));
 
     const totalReward = trader.deals.reduce(
-      (sum, d) => sum + Number(d.rewardAmount),
+      (sum, d) => sum + Number(d.rewardAmount) / 10 ** USDC_DECIMALS,
       0
     );
 
