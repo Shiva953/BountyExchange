@@ -11,7 +11,6 @@ import { SponsorDealResponse, SponsorDealsAPIResponse } from "@/types/api";
 
 export type { CreatedDealWithMetadata };
 
-// Fetch escrow balances directly from on-chain
 async function fetchEscrowBalances(
   connection: Connection,
   escrowVaults: PublicKey[]
@@ -180,18 +179,15 @@ export function useCreatedDeals() {
       for (const deal of onChainDeals) {
         const pubkeyStr = deal.publicKey.toBase58();
 
-        // Skip if already in DB deals (accepted)
         if (dbDealPubkeys.has(pubkeyStr)) continue;
 
-        // Skip if accepted (shouldn't happen but just in case)
         if (deal.account.isAccepted) continue;
 
-        // Skip if expired
         const createdAt = deal.account.createdAt.toNumber();
         const expirationHours = deal.account.expirationWindowInHours.toNumber();
+
         if (isDealExpired(createdAt, expirationHours)) continue;
 
-        // Fetch token metadata
         const tokenMint = deal.account.token.toBase58();
         const tokenMetadata = await getTokenMetadata(tokenMint);
 
@@ -216,7 +212,6 @@ export function useCreatedDeals() {
         });
       }
 
-      // Combine all deals
       const allDeals = [...dbDeals, ...awaitingDeals];
 
       // Calculate total escrow from on-chain (source of truth)

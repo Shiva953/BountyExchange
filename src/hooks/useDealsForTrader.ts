@@ -26,7 +26,6 @@ export function useDealsForTrader() {
   // Clear deals only when switching to a DIFFERENT wallet (not when wallet temporarily becomes undefined)
   useEffect(() => {
     const currentWallet = publicKey?.toBase58() ?? null;
-    // Only clear if switching to a different wallet, not if wallet becomes temporarily undefined
     if (currentWallet && previousWalletRef.current && previousWalletRef.current !== currentWallet) {
       setDeals([]);
       setError(null);
@@ -42,7 +41,6 @@ export function useDealsForTrader() {
       return;
     }
 
-    // Prevent concurrent fetches
     if (isFetchingRef.current) {
       return;
     }

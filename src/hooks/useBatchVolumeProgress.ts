@@ -7,14 +7,8 @@ import { VolumeData, VolumeRequest, BatchVolumeResult } from "@/types/volume";
 
 export type { VolumeData, VolumeRequest, BatchVolumeResult };
 
-const BATCH_SIZE = 10; // Send up to 10 requests per batch API call
-const POLL_INTERVAL = 5000; // Poll every 5 seconds
-
-// NOTE: Removed localStorage caching - it was causing stale data bugs where
-// cached values would override fresh data. The hook now only preserves data
-// within the same session (no page refresh persistence).
-// Stale-while-revalidate now only applies to refetch() calls within same session.
-// time complexity of the entire logic
+const BATCH_SIZE = 10; 
+const POLL_INTERVAL = 5000;
 
 export function useBatchVolumeProgress(
   requests: VolumeRequest[],
