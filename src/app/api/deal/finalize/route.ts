@@ -47,6 +47,7 @@ const PROGRAM_ERROR_MAP: Record<number, string> = {
   6006: "Deal has not been accepted",
   6009: "Deal has expired - cannot finalize",
   6010: "Volume requirement not met",
+  6022: "Unauthorized crank - wrong keypair configured",
 };
 
 /**

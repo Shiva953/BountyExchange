@@ -32,6 +32,7 @@ let isTraderStatsSyncRunning = false;
 let isFinalizationRunning = false;
 let isReconciliationRunning = false;
 let isNewBountyCheckRunning = false;
+let isCancelExpiredRunning = false;
 
 const pendingFinalizations = new Set<string>();
 
@@ -1126,6 +1127,120 @@ export async function checkAndNotifyNewBounties() {
 }
 
 /**
+ * Calls the cancel-expired API endpoint for a single deal
+ */
+async function callCancelExpiredDealAPI(dealPubkey: string): Promise<{
+  success: boolean;
+  signature?: string;
+  error?: string;
+}> {
+  for (let attempt = 1; attempt <= FINALIZE_MAX_RETRIES; attempt++) {
+    try {
+      const baseUrl =
+        process.env.NEXT_PUBLIC_BASE_URL ||
+        process.env.VERCEL_URL ||
+        "http://localhost:3000";
+
+      const response = await fetch(`${baseUrl}/api/deal/cancel-expired`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealPubkey }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        return { success: true, signature: data.signature };
+      }
+
+      const isRetryable =
+        response.status >= 500 ||
+        data.error?.includes("blockhash") ||
+        data.error?.includes("timeout");
+
+      if (!isRetryable) {
+        return { success: false, error: data.error || "Cancellation failed" };
+      }
+
+      console.warn(
+        `[CRON] Cancel-expired API failed (attempt ${attempt}/${FINALIZE_MAX_RETRIES}): ${data.error}`
+      );
+    } catch (error) {
+      console.error(
+        `[CRON] Cancel-expired API error (attempt ${attempt}/${FINALIZE_MAX_RETRIES}):`,
+        error
+      );
+    }
+
+    if (attempt < FINALIZE_MAX_RETRIES) {
+      const delay = FINALIZE_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  return { success: false, error: `Failed after ${FINALIZE_MAX_RETRIES} attempts` };
+}
+
+/**
+ * Finds all active, unaccepted, expired deals on-chain and cancels them,
+ * refunding the escrow back to the creator.
+ */
+async function checkAndCancelExpiredDeals() {
+  if (isCancelExpiredRunning) {
+    console.log("[CRON] Cancel-expired already running, skipping...");
+    return;
+  }
+
+  isCancelExpiredRunning = true;
+  console.log("[CRON] Checking for expired unaccepted deals...");
+
+  try {
+    const nowSec = Math.floor(Date.now() / 1000);
+
+    const connection = new Connection(process.env.HELIUS_DEVNET_URL!, "confirmed");
+    const program = getProgram(connection);
+
+    // Only look at active, NOT accepted deals
+    const allOnChainDeals = await fetchAllDealsOnChain(program, connection);
+    const expiredUnaccepted = allOnChainDeals.filter((d) => {
+      if (!d.account.isActive || d.account.isAccepted) return false;
+      const expiresAtSec =
+        d.account.createdAt.toNumber() +
+        d.account.expirationWindowInHours.toNumber() * 3600;
+      return nowSec >= expiresAtSec;
+    });
+
+    console.log(`[CRON] Found ${expiredUnaccepted.length} expired unaccepted deals to cancel`);
+
+    for (const deal of expiredUnaccepted) {
+      const pubkey = deal.publicKey.toBase58();
+
+      // Skip if escrow is already closed (already cancelled on-chain)
+      const escrowVaultInfo = await connection.getAccountInfo(deal.account.escrowVault);
+      if (!escrowVaultInfo) {
+        console.log(`[CRON] Skipping ${pubkey.slice(0, 8)}... - escrow already closed`);
+        continue;
+      }
+
+      console.log(`[CRON] Cancelling expired deal ${pubkey.slice(0, 8)}...`);
+      const result = await callCancelExpiredDealAPI(pubkey);
+
+      if (result.success) {
+        console.log(
+          `[CRON] Cancelled deal ${pubkey.slice(0, 8)}... sig: ${result.signature?.slice(0, 12)}...`
+        );
+      } else {
+        console.error(`[CRON] Failed to cancel deal ${pubkey.slice(0, 8)}...: ${result.error}`);
+      }
+    }
+  } catch (error) {
+    console.error("[CRON] Error in checkAndCancelExpiredDeals:", error);
+  } finally {
+    isCancelExpiredRunning = false;
+  }
+}
+
+/**
  * Initialize all cron jobs
  */
 export function initCronJobs() {
@@ -1138,6 +1253,10 @@ export function initCronJobs() {
 
   cron.schedule(FINALIZE_CHECK_INTERVAL, () => {
     checkAndFinalizeDeals().catch(console.error);
+  });
+
+  cron.schedule(FINALIZE_CHECK_INTERVAL, () => {
+    checkAndCancelExpiredDeals().catch(console.error);
   });
 
   cron.schedule(TRADER_STATS_INTERVAL, () => {

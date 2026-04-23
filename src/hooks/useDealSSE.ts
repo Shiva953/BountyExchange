@@ -9,7 +9,6 @@ import {
 
 export type { UseDealSSEOptions, UseDealSSEReturn };
 
-// SSE disabled in dev by default - set NEXT_PUBLIC_ENABLE_SSE=true to enable
 const isSSEEnabled = () => {
   if (typeof window === "undefined") return false;
   if (process.env.NODE_ENV === "development") {

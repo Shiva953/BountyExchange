@@ -189,23 +189,19 @@ export default function DealPage() {
     fetchDeal();
   }, [dealPubkey, connection]);
 
-  // Fetch real volume progress when deal is accepted but NOT finalized
-  // For finalized deals, we use the stored volumeCompletedUsd from the deal account
-  // Must be called unconditionally (before any early returns) to follow Rules of Hooks
-  // Memoize params to prevent unnecessary refetches
+
   const isFinalized = deal?.outcome !== null && deal?.outcome !== undefined;
   const volumeParams = useMemo(() => ({
     walletAddress: deal?.trader.toBase58() ?? "",
     tokenMint: deal?.token.toBase58() ?? "",
     startTime: deal?.createdAt,
     minBuyVolume: deal?.minBuyVolume ? deal.minBuyVolume / 10 ** USDC_DECIMALS : undefined,
-    // Only fetch live volume for accepted deals that are NOT finalized
     enabled: Boolean(deal?.isAccepted) && !isFinalized,
   }), [deal?.trader, deal?.token, deal?.createdAt, deal?.minBuyVolume, deal?.isAccepted, isFinalized]);
 
   const { volumeUSD, loading: volumeLoading, refetch: refetchVolume } = useVolumeProgress(volumeParams);
 
-  // SSE for real-time updates - memoize to prevent reconnection loops
+  // SSE for real-time updates -> memoize to prevent reconnection loops
   const dealPublicKeys = useMemo(() => dealPubkey ? [dealPubkey] : [], [dealPubkey]);
   const handleSSEVolumeUpdate = useCallback((dealKey: string, newVolumeUSD: number, progress: number) => {
     console.log(`[SSE] Volume update: ${dealKey.slice(0, 8)}... → $${newVolumeUSD.toFixed(2)} (${progress.toFixed(1)}%)`);
@@ -217,7 +213,6 @@ export default function DealPage() {
 
   useDealSSE({
     dealPublicKeys,
-    // Only enable SSE for accepted deals that are NOT finalized
     enabled: Boolean(deal?.isAccepted) && !isFinalized,
     onVolumeUpdate: handleSSEVolumeUpdate,
     onMilestone: handleSSEMilestone,
@@ -350,9 +345,6 @@ export default function DealPage() {
   const holdDuration = deal.holdDurationInHours;
   const holdText = `${holdDuration} hour${holdDuration !== 1 ? "s" : ""}`;
 
-  // Calculate volume progress
-  // For finalized deals: use the stored volumeCompletedUsd from on-chain (preserves value at finalization time)
-  // For active deals: use realtime SSE if available, otherwise fall back to API fetch
   const targetVolumeUSD = deal.targetVolume / 10 ** USDC_DECIMALS;
   const dealIsFinalized = deal.outcome !== null && deal.outcome !== undefined;
   const currentVolume = dealIsFinalized && deal.volumeCompletedUsd !== null
@@ -360,7 +352,6 @@ export default function DealPage() {
     : realtimeVolume !== null ? realtimeVolume : volumeUSD;  // Use live data for active deals
   const progressPercentage = Math.min(100, Math.round((currentVolume / targetVolumeUSD) * 100));
 
-  // TODO: Implement hold duration tracking
   const holdProgressPercentage = 0;
   const currentHoldHours = 0;
 

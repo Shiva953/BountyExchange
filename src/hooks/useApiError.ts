@@ -54,8 +54,6 @@ function parseApiError(error: unknown): ApiError {
         retryAfter: 1000,
       };
     }
-
-    // RPC errors
     if (message.includes("403") || message.includes("forbidden")) {
       return {
         message: "Service temporarily unavailable. Please try again later.",
@@ -63,7 +61,6 @@ function parseApiError(error: unknown): ApiError {
         retryable: false,
       };
     }
-
     if (message.includes("429") || message.includes("rate limit")) {
       return {
         message: "Too many requests. Please wait a moment.",
@@ -127,8 +124,6 @@ export function useApiError(
 
     setIsRetrying(true);
     onRetryStart?.();
-
-    // Wait for retryAfter delay if specified
     if (error.retryAfter) {
       await new Promise((resolve) => setTimeout(resolve, error.retryAfter));
     }
@@ -180,7 +175,7 @@ export function useApiError(
   };
 }
 
-// Helper to extract API error from fetch response
+
 export async function extractApiError(response: Response): Promise<ApiError> {
   try {
     const data = await response.json();

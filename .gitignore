@@ -15,6 +15,7 @@ bun.lock
 
 # testing
 /coverage
+mainnet-crank.json
 
 # next.js
 /.next/

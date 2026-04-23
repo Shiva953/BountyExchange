@@ -39,6 +39,191 @@ export type BountyExchangeProgram = {
       "args": []
     },
     {
+      "name": "cancelExpiredDeal",
+      "docs": [
+        "Permissionless: refunds escrow to creator if deal expired without being accepted."
+      ],
+      "discriminator": [
+        154,
+        62,
+        119,
+        104,
+        210,
+        175,
+        194,
+        176
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Permissionless — anyone can pay gas to trigger this."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "creator",
+          "writable": true
+        },
+        {
+          "name": "deal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "account",
+                "path": "deal.deal_id",
+                "account": "deal"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrowVault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "deal"
+              },
+              {
+                "kind": "account",
+                "path": "tokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "usdcMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "creatorTokenAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "account",
+                "path": "tokenProgram"
+              },
+              {
+                "kind": "account",
+                "path": "usdcMint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "usdcMint"
+        },
+        {
+          "name": "tokenProgram"
+        },
+        {
+          "name": "associatedTokenProgram",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "createDeal",
       "discriminator": [
         198,
@@ -188,8 +373,7 @@ export type BountyExchangeProgram = {
         {
           "name": "payer",
           "docs": [
-            "Anyone can call this instruction (permissionless crank pattern).",
-            "This allows automated cron jobs to finalize deals without needing the trader's signature."
+            "Only the authorized crank keypair can call this instruction."
           ],
           "writable": true,
           "signer": true
@@ -741,6 +925,21 @@ export type BountyExchangeProgram = {
       "code": 6021,
       "name": "withdrawBeforeExpiration",
       "msg": "Cannot withdraw before bounty expiration period ends"
+    },
+    {
+      "code": 6022,
+      "name": "unauthorizedCrank",
+      "msg": "Only the crank authority can finalize deals"
+    },
+    {
+      "code": 6023,
+      "name": "invalidUsdcMint",
+      "msg": "Invalid USDC mint address"
+    },
+    {
+      "code": 6024,
+      "name": "dealNotExpired",
+      "msg": "Deal has not expired yet"
     }
   ],
   "types": [
