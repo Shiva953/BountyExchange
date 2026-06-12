@@ -15,6 +15,7 @@ import {
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
+import { clusterApiUrl } from "@solana/web3.js";
 
 import "@solana/wallet-adapter-react-ui/styles.css";
 
@@ -82,7 +83,13 @@ const WalletAutoConnectRecovery: FC = () => {
 export const SolanaProvider: FC<SolanaProviderProps> = ({ children }) => {
   const [mounted, setMounted] = useState(false);
 
-  const endpoint = useMemo(() => process.env.NEXT_PUBLIC_HELIUS_DEVNET_URL!, []);
+  const endpoint = useMemo(() => {
+    const url = process.env.NEXT_PUBLIC_HELIUS_DEVNET_URL;
+    if (url?.startsWith("http://") || url?.startsWith("https://")) {
+      return url;
+    }
+    return clusterApiUrl("devnet");
+  }, []);
 
   // Initialize wallet adapters - empty array during SSR to prevent hydration issues
   const wallets = useMemo(
