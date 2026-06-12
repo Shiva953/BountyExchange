@@ -21,83 +21,36 @@ Three views of the same system: what the user does, what the on-chain program en
 
 ### 1. App Flow
 
-From first visit through settlement. Every page sits behind `WalletGate` — the app loads providers, then blocks until Phantom or Solflare connects to Helius devnet.
-
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant App as Next.js UI
-    participant Wallet as Wallet
-    participant API as API Routes
-    participant Chain as Anchor Program
-    participant DB as PostgreSQL
-    participant Helius as Helius
-    participant TG as Telegram
+flowchart TD
+    Start([Open app]) --> Connect[Connect wallet]
+    Connect --> Home[Browse bounties and traders]
 
-    User->>App: Visit site
-    App->>Wallet: Connect (autoConnect if saved)
-    Wallet-->>App: Public key
-    App->>User: Marketplace — browse, search, create
+    Home --> Sponsor[Sponsor: Create Bounty]
+    Sponsor --> Terms[Pick token, trader, reward, volume target, expiry]
+    Terms --> SignCreate[Sign transaction]
+    SignCreate --> Escrow[USDC locked in escrow]
 
-    opt Link Telegram (optional)
-        User->>TG: /link in bot
-        TG->>User: Verify link with code
-        User->>App: /verify/[code] — sign message
-        App->>API: POST /api/telegram/verify
-        API->>DB: Link wallet ↔ Telegram
-    end
+    Home --> Trader[Trader: open bounty page]
+    Trader --> Accept[Accept bounty]
+    Accept --> SignAccept[Sign transaction]
+    SignAccept --> Trade[Swap the target token]
+    Trade --> Progress[Track live volume on deal page]
 
-    rect rgb(30,30,30)
-    note over User,Chain: Sponsor creates bounty
-        User->>App: Create Bounty modal
-        App->>API: POST /api/deal/create
-        API-->>App: Unsigned create_deal tx
-        App->>Wallet: Sign tx
-        App->>Chain: Submit create_deal
-        Note over Chain: USDC → escrow vault<br/>Deal PDA = Open
-        App->>API: POST /api/deal/confirmDealCreated
-        API->>DB: Upsert creator
-        API->>TG: Notify targeted trader
-    end
+    Progress --> Result{Volume + hold met before expiry?}
+    Result -->|Yes| Win[Trader paid from escrow]
+    Result -->|No| Refund[Sponsor refunded]
 
-    rect rgb(30,30,30)
-    note over User,Helius: Trader accepts & trades
-        User->>App: /deal/[pubkey] — Accept
-        App->>API: POST /api/deal/accept
-        API-->>App: Unsigned accept_deal tx
-        App->>Wallet: Sign tx
-        App->>Chain: Submit accept_deal
-        Note over Chain: Deal PDA = Active
-        App->>API: POST /api/deal/confirmDealAccepted
-        API->>DB: Upsert deal + trader
-        API->>Helius: Register wallet on webhook
-        User->>App: Deal page — live volume (SSE)
-        Helius->>API: Swap webhook → volume update
-        API->>App: SSE broadcast to deal page
-    end
-
-    rect rgb(30,30,30)
-    note over API,Chain: Settlement (crank)
-        API->>Helius: Calculate volume (mainnet swaps)
-        API->>Chain: finalize_deal (crank signs)
-        alt Pass — volume + hold met
-            Chain-->>User: USDC escrow → trader
-        else Fail — expired or requirements not met
-            Chain-->>User: USDC escrow → creator
-        end
-        API->>DB: Update outcome
-        API->>TG: Finalization notification
-    end
+    Home -.->|optional| Alerts[Link Telegram for bounty alerts]
 ```
 
-**Routes:** `/` marketplace · `/deal/[pubkey]` detail + accept · `/sponsor` dashboard · `/[wallet]/deals` trader board · `/verify/[code]` Telegram linking
+**Routes:** `/` marketplace · `/deal/[pubkey]` detail and accept · `/sponsor` dashboard · `/[wallet]/deals` trader board · `/verify/[code]` Telegram linking
 
 Trader directory synced from Axiom (`scripts/syncAxiomTraders.ts`).
 
 ### 2. Program Logic
 
-On-chain rules only. The program never parses DEX swaps — volume and hold duration are attested off-chain and submitted at finalization by the authorized crank.
+On-chain rules only. The program never parses DEX swaps. Volume and hold duration are attested off-chain and submitted at finalization by the authorized crank.
 
 ```mermaid
 stateDiagram-v2
@@ -128,8 +81,6 @@ stateDiagram-v2
 Program ID: `5voynNZLcD5xDBmhfvegNK9ySLsjZRU4HdhmC5KQSaSi` (devnet)
 
 ### 3. Backend
-
-Off-chain services bridge wallet UX, volume measurement, and on-chain settlement. On-chain state is source of truth for deal lifecycle; Postgres indexes deals for UI, notifications, and progress bars.
 
 ```mermaid
 flowchart LR
