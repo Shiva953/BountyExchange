@@ -1210,6 +1210,18 @@ async function checkAndCancelExpiredDeals() {
       return nowSec >= expiresAtSec;
     });
 
+    console.log(`[CRON] Expired check: nowSec=${nowSec}, deals checked:`, 
+      allOnChainDeals
+        .filter(d => !d.account.isActive || !d.account.isAccepted ? false : false || true)
+        .map(d => ({
+          pubkey: d.publicKey.toBase58().slice(0, 8),
+          expiresAtSec: d.account.createdAt.toNumber() + d.account.expirationWindowInHours.toNumber() * 3600,
+          isExpired: nowSec >= d.account.createdAt.toNumber() + d.account.expirationWindowInHours.toNumber() * 3600,
+          isActive: d.account.isActive,
+          isAccepted: d.account.isAccepted,
+        }))
+    );
+
     console.log(`[CRON] Found ${expiredUnaccepted.length} expired unaccepted deals to cancel`);
 
     for (const deal of expiredUnaccepted) {

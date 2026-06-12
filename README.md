@@ -15,6 +15,186 @@ Token projects need measurable trading activity from known wallets (KOLs, market
 
 Win condition: volume target **and** hold duration met before expiration. Early finalization triggers once both are satisfied.
 
+## Architecture
+
+Three views of the same system: what the user does, what the on-chain program enforces, and what the backend runs in the background.
+
+### 1. App Flow
+
+From first visit through settlement. Every page sits behind `WalletGate` — the app loads providers, then blocks until Phantom or Solflare connects to Helius devnet.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Next.js UI
+    participant Wallet as Wallet
+    participant API as API Routes
+    participant Chain as Anchor Program
+    participant DB as PostgreSQL
+    participant Helius as Helius
+    participant TG as Telegram
+
+    User->>App: Visit site
+    App->>Wallet: Connect (autoConnect if saved)
+    Wallet-->>App: Public key
+    App->>User: Marketplace — browse, search, create
+
+    opt Link Telegram (optional)
+        User->>TG: /link in bot
+        TG->>User: Verify link with code
+        User->>App: /verify/[code] — sign message
+        App->>API: POST /api/telegram/verify
+        API->>DB: Link wallet ↔ Telegram
+    end
+
+    rect rgb(30,30,30)
+    note over User,Chain: Sponsor creates bounty
+        User->>App: Create Bounty modal
+        App->>API: POST /api/deal/create
+        API-->>App: Unsigned create_deal tx
+        App->>Wallet: Sign tx
+        App->>Chain: Submit create_deal
+        Note over Chain: USDC → escrow vault<br/>Deal PDA = Open
+        App->>API: POST /api/deal/confirmDealCreated
+        API->>DB: Upsert creator
+        API->>TG: Notify targeted trader
+    end
+
+    rect rgb(30,30,30)
+    note over User,Helius: Trader accepts & trades
+        User->>App: /deal/[pubkey] — Accept
+        App->>API: POST /api/deal/accept
+        API-->>App: Unsigned accept_deal tx
+        App->>Wallet: Sign tx
+        App->>Chain: Submit accept_deal
+        Note over Chain: Deal PDA = Active
+        App->>API: POST /api/deal/confirmDealAccepted
+        API->>DB: Upsert deal + trader
+        API->>Helius: Register wallet on webhook
+        User->>App: Deal page — live volume (SSE)
+        Helius->>API: Swap webhook → volume update
+        API->>App: SSE broadcast to deal page
+    end
+
+    rect rgb(30,30,30)
+    note over API,Chain: Settlement (crank)
+        API->>Helius: Calculate volume (mainnet swaps)
+        API->>Chain: finalize_deal (crank signs)
+        alt Pass — volume + hold met
+            Chain-->>User: USDC escrow → trader
+        else Fail — expired or requirements not met
+            Chain-->>User: USDC escrow → creator
+        end
+        API->>DB: Update outcome
+        API->>TG: Finalization notification
+    end
+```
+
+**Routes:** `/` marketplace · `/deal/[pubkey]` detail + accept · `/sponsor` dashboard · `/[wallet]/deals` trader board · `/verify/[code]` Telegram linking
+
+Trader directory synced from Axiom (`scripts/syncAxiomTraders.ts`).
+
+### 2. Program Logic
+
+On-chain rules only. The program never parses DEX swaps — volume and hold duration are attested off-chain and submitted at finalization by the authorized crank.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Open: create_deal<br/>Sponsor locks USDC in escrow
+
+    Open --> Active: accept_deal<br/>Target trader signs
+    Open --> Cancelled: cancel_expired_deal<br/>Past expiry, never accepted
+
+    Active --> Won: finalize_deal<br/>volume ≥ target AND hold ≥ required
+    Active --> Lost: finalize_deal<br/>Expired or requirements not met
+
+    Active --> AdminRecovery: withdraw_from_escrow<br/>Admin only, past expiry (stuck deals)
+
+    Cancelled --> [*]
+    Won --> [*]
+    Lost --> [*]
+    AdminRecovery --> [*]
+```
+
+| Instruction | Signer | What it does |
+|-------------|--------|--------------|
+| `create_deal` | Sponsor | Inits Deal PDA + escrow; 10% fee to protocol wallet, reward to vault |
+| `accept_deal` | Target trader | Sets `is_accepted = true` |
+| `finalize_deal` | Crank (`CRANK_AUTHORITY`) | Pass → escrow to trader; fail → refund creator; closes vault |
+| `cancel_expired_deal` | Anyone | Refunds creator if deal expired unaccepted |
+| `withdraw_from_escrow` | Admin | Emergency recovery of stuck escrow |
+
+Program ID: `5voynNZLcD5xDBmhfvegNK9ySLsjZRU4HdhmC5KQSaSi` (devnet)
+
+### 3. Backend
+
+Off-chain services bridge wallet UX, volume measurement, and on-chain settlement. On-chain state is source of truth for deal lifecycle; Postgres indexes deals for UI, notifications, and progress bars.
+
+```mermaid
+flowchart LR
+    subgraph Client
+        UI[Next.js App]
+    end
+
+    subgraph Server["Next.js Server"]
+        API[API Routes]
+        CRON[Cron / Railway HTTP]
+        SSE[SSE /api/sse/deals]
+    end
+
+    subgraph Data
+        PG[(PostgreSQL)]
+        Redis[(Redis)]
+    end
+
+    subgraph Helius
+        RPC[Devnet RPC]
+        Enhanced[Enhanced Tx API<br/>mainnet volume]
+        WH[Swap Webhooks]
+    end
+
+    TG[Telegram Bot]
+    Crank[Crank Keypair]
+    Program[(Anchor Program)]
+
+    UI -->|build + confirm txs| API
+    UI -->|read deals| RPC
+    UI -->|live progress| SSE
+
+    API --> RPC
+    API --> PG
+    API --> Redis
+    API --> TG
+
+    WH -->|swap events| API
+    API -->|volume cache + dedup| Redis
+    API -->|broadcast| SSE
+
+    CRON -->|sync-traders, reconcile| Enhanced
+    CRON -->|check-expired, finalize| API
+    CRON -->|cancel unaccepted| API
+    CRON -->|new bounty alerts| TG
+
+    API -->|finalize_deal, cancel_expired| Crank
+    Crank --> Program
+```
+
+**Key API paths**
+
+| Path | Role |
+|------|------|
+| `/api/deal/create`, `/accept`, `/finalize`, `/cancel-expired` | Build or execute on-chain instructions |
+| `/api/deal/confirmDealCreated`, `/confirmDealAccepted` | Sync Postgres + trigger notifications after wallet txs land |
+| `/api/helius/webhook` | Real-time swap → volume increment → SSE |
+| `/api/sse/deals` | Push volume updates to open deal pages |
+| `/api/cron?job=...` | Production schedulers (volume sync, finalization, reconciliation) |
+| `/api/telegram/*` | Bot webhook, wallet linking, notification prefs |
+
+**Cron jobs** (in-process in dev via `instrumentation.ts`; Railway HTTP in prod when `CRON_SECRET` is set): volume sync every 3 min · finalization + cancel-expired every 1 min · on-chain reconciliation every 3 min · orphaned-deal cleanup hourly · daily Telegram summaries at 09:00 UTC.
+
+Volume oracle reads **mainnet** swap history; deal escrow and settlement run on **devnet**.
+
 ## Stack
 
 | Layer | Tech |
@@ -42,13 +222,13 @@ Win condition: volume target **and** hold duration met before expiration. Early 
 
 Program: `5voynNZLcD5xDBmhfvegNK9ySLsjZRU4HdhmC5KQSaSi` (devnet). USDC mint: `GqiwdrC5ybCCmtvG2Yir9CVfsENjYQTHwKB9B2y3mi5f`.
 
-Volume oracle reads **mainnet** swap history via Helius; deal settlement runs on **devnet**.
+## Program Reference
 
-## Program Architecture
-
-The Anchor program is a blackbox relative to this repo. Integration happens through the checked-in IDL (`src/program/IDL.json`) and TS instruction builders (`src/program/instructions/`). Rust instruction sources are mirrored temporarily in `instructions/` for reference; canonical source is the program repo.
+The Anchor program is a blackbox relative to this repo. Integration happens through the checked-in IDL (`src/program/IDL.json`) and TS instruction builders (`src/program/instructions/`). Rust instruction sources are mirrored in `program/` for reference; canonical source is the program repo.
 
 **Program repo:** [github.com/Shiva953/bounty-exchange-program](https://github.com/Shiva953/bounty-exchange-program)
+
+See **Architecture §2** for the state diagram and instruction summary.
 
 ### Accounts
 
@@ -58,7 +238,7 @@ The Anchor program is a blackbox relative to this repo. Integration happens thro
 | **Escrow vault** | USDC ATA, authority = Deal PDA |
 | **Fee wallet** | Hardcoded `FEE_WALLET`, receives protocol fee at creation |
 
-**Deal state** (`instructions/create_deal.rs`): `deal_id`, `creator`, `token` (target mint), `trader`, `reward_amount`, `target_volume`, `min_buy_volume`, `expiration_window_in_hours`, `hold_duration_in_hours`, `escrow_vault`, `created_at`, `is_active`, `is_accepted`, `outcome`, `volume_completed_usd`.
+**Deal state** (`program/create_deal.rs`): `deal_id`, `creator`, `token` (target mint), `trader`, `reward_amount`, `target_volume`, `min_buy_volume`, `expiration_window_in_hours`, `hold_duration_in_hours`, `escrow_vault`, `created_at`, `is_active`, `is_accepted`, `outcome`, `volume_completed_usd`.
 
 ### Instructions
 
@@ -85,67 +265,6 @@ The Anchor program is a blackbox relative to this repo. Integration happens thro
 **`withdraw_from_escrow`** (hardcoded `ADMIN` only)
 - Active deal, only after expiration window elapsed
 - Escrow to admin ATA (emergency recovery), closes vault
-
-### State machine
-
-```
-                    create_deal
-                        |
-                        v
-              +-------------------+
-              |  Open (unaccepted)|
-              +-------------------+
-                 |            |
-       accept_deal|            | cancel_expired_deal
-                 |            | (past expiry)
-                 v            v
-              +-------------------+     +-----------+
-              | Active (accepted) |     | Cancelled |
-              +-------------------+     +-----------+
-                 |            |
-    finalize pass|            | finalize fail
-                 v            v
-              +------+     +------+
-              | Won  |     | Lost |
-              +------+     +------+
-
-  Active deal past expiry (stuck) --> withdraw_from_escrow (admin)
-```
-
-The program never parses DEX swaps. Volume and hold duration are attested off-chain (Helius) and submitted by the crank at finalization.
-
-## App Architecture
-
-```
-┌─────────────┐     wallet sign      ┌──────────────────────┐
-│   Browser   │ ───────────────────► │  Anchor Program      │
-│  (Next.js)  │ ◄─── deal accounts ─ │  (USDC escrow)       │
-└──────┬──────┘                      └──────────┬───────────┘
-       │ API                                    │ finalize
-       ▼                                        ▼
-┌─────────────┐   volume calc    ┌──────────────────────┐
-│  API Routes │ ◄──────────────► │  Helius (RPC + API)  │
-│  + Cron     │   webhooks       │  Enhanced Txs        │
-└──────┬──────┘                  └──────────────────────┘
-       │
-       ├── PostgreSQL (deal index, traders, notifications)
-       ├── Redis (volume cache)
-       └── Telegram (trader alerts, wallet linking)
-```
-
-**On-chain** owns escrow, deal state, and settlement. **Off-chain** owns volume measurement; the crank is the bridge at finalization.
-
-## App Surfaces
-
-| Route | Purpose |
-|-------|---------|
-| `/` | Open bounties, create bounty, trader index |
-| `/deal/[dealPubkey]` | Deal detail, accept, live volume progress (SSE) |
-| `/sponsor` | Sponsor dashboard and campaigns |
-| `/[walletAddress]/deals` | Trader deal board |
-| `/verify/[code]` | Telegram wallet linking |
-
-Trader directory synced from Axiom (`scripts/syncAxiomTraders.ts`).
 
 ## Development
 
