@@ -84,11 +84,8 @@ export const SolanaProvider: FC<SolanaProviderProps> = ({ children }) => {
   const [mounted, setMounted] = useState(false);
 
   const endpoint = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_HELIUS_DEVNET_URL;
-    if (url?.startsWith("http://") || url?.startsWith("https://")) {
-      return url;
-    }
-    return clusterApiUrl("devnet");
+    const url = process.env.HELIUS_DEVNET_URL || "https://api.devnet.solana.com";
+    return url;
   }, []);
 
   // Initialize wallet adapters - empty array during SSR to prevent hydration issues
