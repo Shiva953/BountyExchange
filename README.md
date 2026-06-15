@@ -2,6 +2,10 @@
 
 Performance-based USDC bounties for Solana token volume. A sponsor escrow-locks a reward against a specific trader wallet; the trader accepts, generates swap volume on a target mint, and gets paid on-chain if they hit volume and hold requirements before expiry.
 
+## Demo
+
+https://github.com/user-attachments/assets/3afc0b48-b8fa-4b12-81bb-ce1012623f9b
+
 ## Problem
 
 Token projects need measurable trading activity from known wallets (KOLs, market makers, traders). Off-platform deals have no escrow, no objective settlement, and no way to enforce volume or hold terms. Bounty Exchange wraps that arrangement in an Anchor program with USDC escrow and an off-chain volume oracle that feeds finalization.
